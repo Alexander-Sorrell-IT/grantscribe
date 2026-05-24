@@ -1,0 +1,28 @@
+display_information:
+  name: GrantScribe
+  description: Finds open federal grants for your work and drafts a Letter of Intent in your org's voice.
+  background_color: "#1a4d2e"
+features:
+  bot_user:
+    display_name: grantscribe
+    always_online: true
+  slash_commands:
+    - command: /grants
+      description: Find federal grants for your work
+      usage_hint: what your org does + what you need
+      should_escape: false
+    - command: /learn
+      description: Find free ways to learn something
+      usage_hint: what you want to learn
+      should_escape: false
+oauth_config:
+  scopes:
+    bot:
+      - commands
+      - chat:write
+settings:
+  interactivity:
+    is_enabled: true
+  socket_mode_enabled: true
+  org_deploy_enabled: false
+  token_rotation_enabled: false

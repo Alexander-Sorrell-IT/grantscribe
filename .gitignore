@@ -1,0 +1,18 @@
+# secrets — never commit
+.env
+*.key
+
+# playwright / demo artifacts (contain your Slack login session + recordings)
+demo/pw_profile/
+demo/video/
+*.webm
+
+# python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.uv/
+
+# os
+.DS_Store
