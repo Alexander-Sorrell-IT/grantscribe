@@ -1,6 +1,6 @@
 display_information:
   name: GrantScribe
-  description: Finds open federal grants for your work and drafts a Letter of Intent in your org's voice.
+  description: Removes the money barrier to opportunity — finds grants & scholarships you qualify for (drafted in your voice) and free ways to learn anything.
   background_color: "#1a4d2e"
 features:
   bot_user:
@@ -14,6 +14,10 @@ features:
     - command: /learn
       description: Find free ways to learn something
       usage_hint: what you want to learn
+      should_escape: false
+    - command: /ask
+      description: Ask a learning question, answered from free open textbooks
+      usage_hint: your question
       should_escape: false
 oauth_config:
   scopes:

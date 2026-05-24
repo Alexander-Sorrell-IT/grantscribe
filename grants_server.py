@@ -15,6 +15,7 @@ from grants_api import _fetch_grants
 from grant_intel import find_grants as _find_grants
 from loi_drafter import draft_loi as _draft_loi
 from resources import find_resources as _find_resources
+from ask import answer_question as _answer_question
 
 mcp = FastMCP("grantscribe", json_response=True)
 
@@ -67,6 +68,19 @@ def find_resources(description: str, rows: int = 12, top: int = 4) -> dict:
         top: how many books to return.
     """
     return _find_resources(description, rows=rows, top=top)
+
+
+@mcp.tool()
+def answer_question(question: str) -> dict:
+    """Tutor: answer a learning question GROUNDED in free open textbooks
+    (Wikibooks/Wikiversity), with citations. No invented facts.
+
+    Args:
+        question: the learner's question.
+
+    Returns dict: {question, answer, sources:[{title,site,url}]}.
+    """
+    return _answer_question(question)
 
 
 if __name__ == "__main__":

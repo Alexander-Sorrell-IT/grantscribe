@@ -64,3 +64,13 @@ def mcp_find_resources(description: str, rows: int = 12, top: int = 4) -> dict:
     if text:
         return json.loads(text)
     raise RuntimeError("find_resources returned no usable content")
+
+
+def mcp_answer_question(question: str) -> dict:
+    result = asyncio.run(_call_tool("answer_question", {"question": question}))
+    if result.structuredContent is not None:
+        return result.structuredContent
+    text = _first_text(result)
+    if text:
+        return json.loads(text)
+    raise RuntimeError("answer_question returned no usable content")

@@ -17,6 +17,7 @@ from slack_bolt import App
 from slack_bolt.adapter.socket_mode import SocketModeHandler
 
 from mcp_bridge import (
+    mcp_answer_question as ask_question,
     mcp_draft_loi as draft_loi,
     mcp_find_grants as find_grants,
     mcp_find_resources as find_resources,
@@ -147,6 +148,29 @@ def handle_learn(ack, command, respond):
     courses = "\n".join(f"• <{c['url']}|{c['title']}>" for c in result["courses"])
     blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": f"*Free courses & textbooks:*\n{courses}"}})
     respond(blocks=blocks, text="Free learning resources")
+
+
+@app.command("/ask")
+def handle_ask(ack, command, respond):
+    ack()
+    question = (command.get("text") or "").strip()
+    if not question:
+        respond("Ask a learning question — e.g. `/ask what is a derivative in calculus?`")
+        return
+
+    respond(f"📖 Looking it up in free open textbooks: _{question}_ …")
+    try:
+        result = ask_question(question)
+    except Exception as exc:
+        respond(f"⚠️ Tutor failed: `{exc}`")
+        raise
+
+    answer = result.get("answer") or result.get("note") or "No answer found."
+    blocks = [{"type": "section", "text": {"type": "mrkdwn", "text": f"*📖 {question}*\n\n{answer[:2800]}"}}]
+    if result.get("sources"):
+        src = "\n".join(f"• <{s['url']}|{s['site']}: {s['title']}>" for s in result["sources"])
+        blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": f"_Sources (free open textbooks):_\n{src}"}})
+    respond(blocks=blocks, text="Tutor answer")
 
 
 if __name__ == "__main__":
