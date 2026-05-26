@@ -3,7 +3,11 @@
 **One line:** GrantScribe removes the money barrier to opportunity — inside Slack, it finds the
 funding you qualify for and drafts the application in your own voice.
 
-## Diagram (Mermaid — paste into mermaid.live to export a PNG for the submission)
+## Diagram
+
+![GrantScribe architecture](architecture.png)
+
+Source (Mermaid — edit and re-export with `mmdc -i src -o architecture.png` if the diagram changes):
 
 ```mermaid
 flowchart TD

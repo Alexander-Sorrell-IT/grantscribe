@@ -16,7 +16,7 @@ the July 13 deadline.
 | Project track | "Slack Agent for Good" (above) | Done |
 | Text description: features & functionality | [`submission/DEVPOST.md`](submission/DEVPOST.md) + section 2 below | Done |
 | Impact explanation (Slack Agent for Good) | [`submission/IMPACT.md`](submission/IMPACT.md) + section 3 below | Done |
-| Architecture diagram | [`submission/ARCHITECTURE.md`](submission/ARCHITECTURE.md) (Mermaid) | Diagram written — **needs PNG export for upload** |
+| Architecture diagram | [`submission/architecture.png`](submission/architecture.png) (Mermaid source in [`submission/ARCHITECTURE.md`](submission/ARCHITECTURE.md)) | Done |
 | ~3-minute demo video | `demo/` | **Not recorded yet** |
 | Slack developer sandbox URL with access for `slackhack@salesforce.com` + `testing@devpost.com` | Slack workspace `GrantScribe` | **Sandbox URL not captured; testers not invited yet** |
 | Public code repo | [github.com/Alexander-Sorrell-IT/grantscribe.](https://github.com/Alexander-Sorrell-IT/grantscribe.) | Pushed and clean — **repo name has trailing dot; consider renaming** |
@@ -128,15 +128,7 @@ All run live against real APIs on **2026-05-25** with current `.env`. Every test
    here.
 2. **Capture sandbox URL + invite the two testers.** Invite `slackhack@salesforce.com` and
    `testing@devpost.com` to the `GrantScribe` workspace; record the workspace URL.
-3. **Export the architecture diagram to PNG.** Paste the Mermaid block from
-   `submission/ARCHITECTURE.md` into mermaid.live → export PNG → save as
-   `submission/architecture.png`.
-
-**Nice-to-haves before submission:**
-4. **Rename the GitHub repo from `grantscribe.` to `grantscribe`** (trailing dot is in the
-   actual repo name; the `..git` in the remote URL is correct because of it). A judge clicking the
-   URL will see the dot. One `gh repo rename` away.
-5. **Get CareerOneStop credentials** so `/scholarships` is live in the demo. Free token, but
+3. **Get CareerOneStop credentials** so `/scholarships` is live in the demo. Free token, but
    takes a day or so. Deadline is July 13, so there is time. If credentials don't arrive close
    to the deadline, drop `/scholarships` from the demo and note it as "next" rather than ship a
    broken path.
@@ -144,8 +136,10 @@ All run live against real APIs on **2026-05-25** with current `.env`. Every test
 **Already complete:**
 - All four code pipelines work live (see §5).
 - MCP is genuinely load-bearing (proven by the three `test_mcp_*` scripts).
-- Architecture, impact, and Devpost copy are written.
-- Working tree clean, pushed to `origin/main`.
+- Architecture diagram exported to `submission/architecture.png`.
+- Devpost-form-ready copy in `submission/DEVPOST.md` (mirrors the form's exact fields).
+- Impact statement in `submission/IMPACT.md`.
+- GitHub repo renamed to `grantscribe` (no trailing dot), local clean and pushed to `origin/main`.
 
 ---
 
