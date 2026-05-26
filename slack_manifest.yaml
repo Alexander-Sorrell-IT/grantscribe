@@ -7,9 +7,17 @@ features:
     display_name: grantscribe
     always_online: true
   slash_commands:
+    - command: /setreport
+      description: Set your org's voice/context (paste a prior grant or annual report)
+      usage_hint: (opens a paste dialog) — or `/setreport <report text>`
+      should_escape: false
     - command: /grants
-      description: Find federal grants for your work
+      description: Find federal grants for your work + draft the LOI in your voice
       usage_hint: what your org does + what you need
+      should_escape: false
+    - command: /scholarships
+      description: Find scholarships + draft the essay in the student's voice
+      usage_hint: about the student
       should_escape: false
     - command: /learn
       description: Find free ways to learn something

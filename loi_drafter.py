@@ -98,11 +98,22 @@ def draft_loi(grant: dict, org_report: str) -> str:
     if not letter:
         raise RuntimeError("draft_loi returned empty output")
 
+    # The Reshaping Principle compiled: every field grants.gov gave us as a trusted
+    # identifier must appear verbatim in the letter, or we refuse to return it.
+    # The system is structurally incapable of returning a non-submittable artifact.
     opp = grant["opportunity_number"]
     url = grant["url"]
-    if opp not in letter or url not in letter:
+    close = grant.get("close_date") or ""
+    missing: list[str] = []
+    if opp not in letter:
+        missing.append("opportunity_number")
+    if url not in letter:
+        missing.append("grant URL")
+    if close and close not in letter:
+        missing.append("submission deadline")
+    if missing:
         raise RuntimeError(
-            "draft_loi output is missing the verbatim opportunity number or grant URL — "
+            f"draft_loi output is missing verbatim grants.gov field(s): {missing} — "
             "refusing to return a non-submittable draft"
         )
     return letter

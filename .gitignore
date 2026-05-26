@@ -2,6 +2,9 @@
 .env
 *.key
 
+# per-workspace org reports (private user content; written by /setreport)
+state/
+
 # playwright / demo artifacts (contain your Slack login session + recordings)
 demo/pw_profile/
 demo/video/
