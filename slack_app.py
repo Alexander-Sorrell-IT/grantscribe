@@ -17,7 +17,6 @@ your report) is shipped in code, not asserted in copy.
 """
 import json
 import os
-import threading
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -30,41 +29,9 @@ from mcp_bridge import (
     mcp_find_grants as find_grants,
     mcp_find_resources as find_resources,
 )
+from report_store import get_report, set_report
 
 load_dotenv(Path(__file__).with_name(".env"))
-
-# Per-(workspace, user) org-report store. The report is the org's voice + grounded
-# facts the LOI drafter copies from; it's private content, so the file is .gitignored.
-STATE_DIR = Path(__file__).parent / "state"
-STATE_DIR.mkdir(exist_ok=True)
-REPORT_STORE_PATH = STATE_DIR / "org_reports.json"
-_STORE_LOCK = threading.Lock()
-
-
-def _load_store() -> dict:
-    if REPORT_STORE_PATH.exists():
-        return json.loads(REPORT_STORE_PATH.read_text() or "{}")
-    return {}
-
-
-def _save_store(store: dict) -> None:
-    REPORT_STORE_PATH.write_text(json.dumps(store, indent=2))
-
-
-def _store_key(team_id: str, user_id: str) -> str:
-    return f"{team_id}:{user_id}"
-
-
-def get_report(team_id: str, user_id: str) -> str | None:
-    with _STORE_LOCK:
-        return _load_store().get(_store_key(team_id, user_id))
-
-
-def set_report(team_id: str, user_id: str, report: str) -> None:
-    with _STORE_LOCK:
-        store = _load_store()
-        store[_store_key(team_id, user_id)] = report.strip()
-        _save_store(store)
 
 
 app = App(token=os.environ["SLACK_BOT_TOKEN"])

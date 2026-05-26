@@ -79,6 +79,11 @@ Full version, with the comparisons table and the audience pivot, in [`submission
 
 ## 5. Validation — what we actually ran
 
+> **Single auditable proof:** run `python verify.py` from the repo root. It starts
+> the MCP server, exercises every shipped claim listed in §4, and prints PASS / FAIL
+> per claim with file:line evidence. Exits 0 iff every claim is verified live.
+> Last run (2026-05-26): **9/9 PASS**.
+
 All run live against real APIs. Every test exits 0.
 
 | Test | What it proves | Result |
@@ -94,6 +99,7 @@ All run live against real APIs. Every test exits 0.
 | `test_mcp_ask.py` | `/ask` through MCP | ✓ |
 | `test_mcp_resources.py` | `/learn` through MCP | ✓ |
 | `demo/mcp_client.py` (manual) | A second, **standalone** MCP client (no GrantScribe imports) hits the same server and gets the same ranked grants + cited tutor answers. | ✓ Verified 2026-05-26 |
+| **`verify.py`** | **Self-contained claim-by-claim audit** — starts the MCP server, runs all 9 §4 claims with PASS/FAIL output and file:line evidence. **Designed for judges to run.** | **✓ 9/9 PASS 2026-05-26** |
 
 **Not tested live:** `/scholarships` — CareerOneStop credentials not yet obtained. The command is registered in the manifest with an honest empty-state message until wired. See §6.
 

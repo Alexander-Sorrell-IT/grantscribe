@@ -60,6 +60,14 @@ Secrets live in a git-ignored `.env`. Per-workspace org reports live in a git-ig
 
 Single entry point: [`SUBMISSION.md`](SUBMISSION.md). It maps every Devpost requirement to a file, self-assesses against the four judging criteria, and tracks remaining work.
 
+**Audit the claims yourself:**
+
+```
+python verify.py
+```
+
+The script starts the MCP server, exercises every shipped claim from `SUBMISSION.md` §4 (the moat refuses, the post-check rejects bad drafts, the MCP server exposes the load-bearing tools, the tutor cites or refuses, the per-user report store isolates users), and prints PASS/FAIL per claim with file:line evidence. Exits 0 only if every claim is verified live. Last run: **9/9 PASS** on 2026-05-26.
+
 ## Impact
 
 See [`submission/IMPACT.md`](submission/IMPACT.md). The U.S. high school class of 2024 left **$4.4 billion in Pell Grants on the table** because not applying was easier than applying. GrantScribe inverts that incentive — when describing what you do is easier than writing what you do, the application is the default, not the exception.
