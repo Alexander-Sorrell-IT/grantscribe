@@ -29,14 +29,26 @@ def _client() -> OpenAI:
 
 
 def draft_loi(grant: dict, org_report: str) -> str:
-    """Draft a Letter of Intent for `grant`, in the voice of the org behind `org_report`."""
+    """Draft a Letter of Intent for `grant`, in the voice of the org behind `org_report`.
+
+    The grant payload is the one returned by grants.gov via `grants_api._fetch_grants`,
+    so opportunity_number / url / close_date are trustworthy-by-source — the model is
+    given them as VERBATIM facts to copy, never to invent.
+    """
     if not org_report.strip():
         raise ValueError("org_report is empty — need the org's prior grant report for voice/grounding")
+
+    required = ("title", "agency", "opportunity_number", "url")
+    missing = [k for k in required if not grant.get(k)]
+    if missing:
+        raise ValueError(f"grant missing required fields from grants.gov: {missing}")
+
+    deadline = grant.get("close_date") or "rolling / unspecified (verify on grants.gov)"
 
     resp = _client().chat.completions.create(
         model=_MODEL_PRO,
         temperature=0.4,
-        max_tokens=900,
+        max_tokens=1100,
         extra_body=_NO_THINK,
         messages=[
             {
@@ -44,20 +56,39 @@ def draft_loi(grant: dict, org_report: str) -> str:
                 "content": (
                     "You draft a Letter of Intent (LOI) for a U.S. federal grant on behalf of a "
                     "nonprofit. Write in the ORGANIZATION'S OWN VOICE — mirror the tone, terminology, "
-                    "program names, populations, and specifics from their prior grant report. The LOI: "
-                    "(1) introduces the org using REAL details from the report, (2) states intent to "
-                    "apply for the named grant, (3) connects the org's mission and track record to the "
-                    "grant's purpose, (4) names the funding need. ~250-350 words, professional and "
-                    "specific. Ground ONLY in facts from the report — do NOT invent statistics, "
-                    "outcomes, or achievements not present. Reference the grant ONLY by its title and "
-                    "funding agency; do NOT include or invent any opportunity number, CFDA number, "
-                    "grant ID, or 'RE:' line (those are tracked separately). End with a signature placeholder."
+                    "program names, populations, and specifics from their prior grant report.\n\n"
+                    "FORMAT (strict):\n"
+                    "1. First line: `RE: <OPPORTUNITY_NUMBER> — <GRANT_TITLE>` — copy the opportunity "
+                    "number EXACTLY as given by the user (it is from grants.gov, do not modify, "
+                    "expand, or reformat it).\n"
+                    "2. Blank line, then the addressee block: the funding agency on its own line, "
+                    "then the line `Posted at: <GRANT_URL>` (copy the URL exactly).\n"
+                    "3. Blank line, then a salutation (e.g. `Dear <Agency> Grants Program Officer,`).\n"
+                    "4. Body, ~250–350 words: (a) introduce the org using REAL details from the "
+                    "report, (b) state intent to apply for this opportunity, (c) connect the org's "
+                    "mission and track record to the grant's purpose, (d) name the specific funding "
+                    "need.\n"
+                    "5. A `Submission deadline:` line with the close date supplied by the user "
+                    "(copy verbatim).\n"
+                    "6. Signature placeholder using the executive's name from the report.\n\n"
+                    "GROUNDING RULES (strict):\n"
+                    "- Ground ONLY in facts from the supplied org report — do NOT invent statistics, "
+                    "  outcomes, achievements, or partnerships not present in it.\n"
+                    "- The opportunity number, grant URL, and close date are TRUSTWORTHY because the "
+                    "  user fetched them live from grants.gov. Copy them VERBATIM. Do not invent or "
+                    "  change them. If you would otherwise have to guess one, fail loudly instead.\n"
+                    "- Do not invent CFDA numbers, grant program codes, or contact emails."
                 ),
             },
             {
                 "role": "user",
                 "content": (
-                    f"GRANT:\n  Title: {grant['title']}\n  Funding agency: {grant['agency']}\n\n"
+                    "GRANT (verbatim from grants.gov — copy these strings exactly into the LOI header):\n"
+                    f"  OPPORTUNITY_NUMBER: {grant['opportunity_number']}\n"
+                    f"  GRANT_TITLE:        {grant['title']}\n"
+                    f"  FUNDING_AGENCY:     {grant['agency']}\n"
+                    f"  GRANT_URL:          {grant['url']}\n"
+                    f"  CLOSE_DATE:         {deadline}\n\n"
                     f"ORG'S PRIOR GRANT REPORT (their voice + facts to ground in):\n{org_report}"
                 ),
             },
@@ -66,4 +97,12 @@ def draft_loi(grant: dict, org_report: str) -> str:
     letter = (resp.choices[0].message.content or "").strip()
     if not letter:
         raise RuntimeError("draft_loi returned empty output")
+
+    opp = grant["opportunity_number"]
+    url = grant["url"]
+    if opp not in letter or url not in letter:
+        raise RuntimeError(
+            "draft_loi output is missing the verbatim opportunity number or grant URL — "
+            "refusing to return a non-submittable draft"
+        )
     return letter

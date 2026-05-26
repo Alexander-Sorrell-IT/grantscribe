@@ -61,7 +61,13 @@ def _grant_card(grant: dict) -> list[dict]:
                     "text": {"type": "plain_text", "text": "✍️  Draft LOI"},
                     "style": "primary",
                     "action_id": "draft_loi",
-                    "value": json.dumps({"title": grant["title"], "agency": grant["agency"]}),
+                    "value": json.dumps({
+                        "title": grant["title"],
+                        "agency": grant["agency"],
+                        "opportunity_number": grant["opportunity_number"],
+                        "url": grant["url"],
+                        "close_date": grant.get("close_date", ""),
+                    }),
                 }
             ],
         },

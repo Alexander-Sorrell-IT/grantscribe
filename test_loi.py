@@ -26,7 +26,18 @@ def main() -> None:
     print("=" * 72)
     print(letter)
     print("=" * 72)
-    print("\nOK: full pipeline — messy description -> relevant grant -> LOI in org voice.")
+
+    # Submittability checks: the LOI must carry the grant's identifiers verbatim,
+    # straight from grants.gov, so a small nonprofit can submit it without manual lookup.
+    assert grant["opportunity_number"] in letter, "LOI missing opportunity number"
+    assert grant["url"] in letter, "LOI missing grants.gov URL"
+    if grant.get("close_date"):
+        assert grant["close_date"] in letter, "LOI missing submission deadline"
+
+    print(
+        "\nOK: full pipeline — messy description -> relevant grant -> "
+        "submittable LOI in org voice (opportunity number, URL, and deadline present)."
+    )
 
 
 if __name__ == "__main__":
