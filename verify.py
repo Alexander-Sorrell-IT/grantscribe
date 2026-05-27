@@ -299,6 +299,86 @@ def check_rerank_reason_present(_: Context) -> str:
     return f"every ranked grant has a non-empty 'reason' ({len(reasons)} grants) — grant_intel.py:73-111"
 
 
+def check_receipt_structure_and_offline_verify(_: Context) -> str:
+    """C10: build_receipt + verify_receipt_offline form a self-consistent pair.
+
+    Synthesize a receipt directly (no LLM call), parse it, verify offline. Demonstrates
+    the cryptographic shape of the application infrastructure.
+    """
+    from loi_receipt import build_receipt, parse_receipt, verify_receipt_offline
+    grant = {
+        "opportunity_number": "TEST-OPP-1",
+        "title": "Title", "agency": "Agency",
+        "url": "https://www.grants.gov/search-results-detail/999",
+        "close_date": "12/31/2099",
+    }
+    receipt_text = build_receipt(grant, "Sample org report content for hashing.")
+    parsed = parse_receipt(receipt_text)
+    if parsed is None:
+        raise AssertionError("build_receipt produced text that parse_receipt cannot read")
+    result = verify_receipt_offline(parsed)
+    if not result["verified"]:
+        raise AssertionError(f"freshly-built receipt failed offline verification: {result}")
+    return f"receipt round-trip OK; sha256={parsed['grant_canonical_sha256'][:16]}…"
+
+
+def check_receipt_detects_tampering(_: Context) -> str:
+    """C11: a tampered receipt (opportunity_number swapped) fails offline verification.
+
+    The hash check catches the tampering — proves the receipt isn't just decorative.
+    """
+    from loi_receipt import build_receipt, parse_receipt, verify_receipt_offline
+    grant = {
+        "opportunity_number": "REAL-OPP-1",
+        "title": "T", "agency": "A",
+        "url": "https://www.grants.gov/search-results-detail/100",
+        "close_date": "12/31/2099",
+    }
+    receipt_text = build_receipt(grant, "report")
+    # Tamper: swap the opportunity_number AFTER the hash was computed.
+    tampered = receipt_text.replace("REAL-OPP-1", "FAKE-OPP-1")
+    parsed = parse_receipt(tampered)
+    if parsed is None:
+        raise AssertionError("tampered receipt didn't parse — test setup is broken")
+    result = verify_receipt_offline(parsed)
+    if result["verified"]:
+        raise AssertionError("tampered receipt passed offline verification — the hash check isn't catching tampering")
+    hash_check = next((c for c in result["checks"] if "sha256" in c["name"]), None)
+    if not hash_check or hash_check["passed"]:
+        raise AssertionError("hash-mismatch check did not fire on tampered receipt")
+    return "tampering detected: hash recompute mismatches the stored grant_canonical_sha256"
+
+
+def check_receipt_anchored_in_live_grants_gov(_: Context) -> str:
+    """C12: a fresh receipt re-verifies live against the grants.gov API.
+
+    Funder-side workflow: re-fetch the grant from the live API, recompute the
+    canonical hash, confirm it matches what's in the receipt. Closes the loop.
+    """
+    from loi_receipt import build_receipt, parse_receipt, verify_receipt_live
+    # Get a real grant from live grants.gov via the MCP server (same path the demo uses).
+    out = asyncio.run(_mcp_call("find_grants", {
+        "description": "youth refugee tutoring Ohio operating funds",
+        "rows": 15,
+        "top": 3,
+    }))
+    grants = out.get("grants", [])
+    if not grants:
+        raise AssertionError("no live grants to anchor the receipt against")
+    grant = grants[0]
+    receipt_text = build_receipt(grant, "Live anchor verification — org report stand-in.")
+    parsed = parse_receipt(receipt_text)
+    if parsed is None:
+        raise AssertionError("receipt parse failed on live-anchor test")
+    result = verify_receipt_live(parsed)
+    if not result["verified"]:
+        raise AssertionError(f"live receipt verification failed: {result}")
+    return (
+        f"live grants.gov re-fetch of {grant['opportunity_number']} hashes to the same "
+        f"grant_canonical_sha256 — receipt anchored in live API"
+    )
+
+
 def check_ask_grounded_or_refuses(_: Context) -> str:
     """C9: /ask returns a cited answer when sources exist, or null/note when they don't."""
     # First: a question that has good Wikibooks coverage → expect grounded answer + sources.
@@ -337,6 +417,12 @@ CLAIMS: list[Claim] = [
           "grant_intel.py:73-111", check_rerank_reason_present, requires_mcp=True),
     Claim(9, "/ask returns a cited answer (or refuses) — never invents",
           "ask.py:31-74", check_ask_grounded_or_refuses, requires_mcp=True),
+    Claim(10, "Every LOI carries a structured verification receipt (round-trips offline)",
+          "loi_receipt.py:build_receipt + verify_receipt_offline", check_receipt_structure_and_offline_verify, requires_mcp=False),
+    Claim(11, "Receipt verification catches tampering (a swapped opportunity_number fails the hash check)",
+          "loi_receipt.py:verify_receipt_offline (negative test)", check_receipt_detects_tampering, requires_mcp=False),
+    Claim(12, "Receipt re-verifies live against grants.gov (funder-side audit closes the loop)",
+          "loi_receipt.py:verify_receipt_live + grants_api._fetch_grants", check_receipt_anchored_in_live_grants_gov, requires_mcp=True),
 ]
 
 

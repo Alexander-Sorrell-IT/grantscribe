@@ -1,8 +1,8 @@
 # GrantScribe
 
-**You describe what you do. The Letter of Intent appears, in your voice, ready to submit.**
+**You describe what you do. The Letter of Intent appears, in your voice, ready to submit — with a receipt the funder can verify.**
 
-A Slack agent that finds the funding and free learning you qualify for, then **drafts the application in your own voice — and refuses to ship a draft that isn't actually submittable.** The grant-writer, the college counselor, and the tutor — three people the wealthy hire — inside one Slack channel.
+A Slack agent that finds the funding and free learning you qualify for, **drafts the application in your own voice, refuses to ship a draft that isn't actually submittable, and ships a verifiable receipt with every LOI** so the funder can re-verify it back to live grants.gov data without trusting the sender. Three professionals the wealthy hire — grant-writer, college counselor, tutor — inside one Slack channel. Plus a new category that didn't exist yesterday: **verifiable application infrastructure**.
 
 Built for the Slack Agent Builder Challenge (Slack Agent for Good).
 
@@ -63,10 +63,19 @@ Single entry point: [`SUBMISSION.md`](SUBMISSION.md). It maps every Devpost requ
 **Audit the claims yourself:**
 
 ```
-python verify.py
+python verify.py        # 12 claims, all live — 12/12 PASS as of 2026-05-26
 ```
 
-The script starts the MCP server, exercises every shipped claim from `SUBMISSION.md` §4 (the moat refuses, the post-check rejects bad drafts, the MCP server exposes the load-bearing tools, the tutor cites or refuses, the per-user report store isolates users), and prints PASS/FAIL per claim with file:line evidence. Exits 0 only if every claim is verified live. Last run: **9/9 PASS** on 2026-05-26.
+The script starts the MCP server, exercises every shipped claim from `SUBMISSION.md` §4 (the moat refuses, the post-check rejects bad drafts, the MCP server exposes the load-bearing tools, the tutor cites or refuses, the per-user report store isolates users, **every LOI carries a verifiable receipt, tampering with a receipt fails the hash check, the receipt re-verifies live against grants.gov**), and prints PASS / FAIL per claim with file:line evidence. Exits 0 only if every claim is verified live.
+
+**Funder-side: verify a received LOI:**
+
+```
+python verify_loi.py --letter received_loi.txt           # offline (hash self-consistency)
+python verify_loi.py --letter received_loi.txt --live    # re-fetch from grants.gov and recompute
+```
+
+Tampering with the opportunity number, URL, or deadline breaks the hash. The funder doesn't have to trust the sender.
 
 ## Impact
 

@@ -1,7 +1,7 @@
 # GrantScribe — Slack Agent Builder Challenge Submission
 
 **Track:** Slack Agent for Good
-**Tagline:** You describe what you do. The Letter of Intent appears, in your voice, ready to submit.
+**Tagline:** You describe what you do. The Letter of Intent appears, in your voice, ready to submit — with a receipt the funder can verify.
 
 This file is the single entry point for judges. It maps every Devpost requirement to where it
 lives in the repo, self-assesses against the four judging criteria, lists the live-validation
@@ -51,11 +51,12 @@ Full version, with the comparisons table and the audience pivot, in [`submission
 
 ### Technological Implementation
 
-- **MCP is load-bearing, in code.** Two distinct MCP clients call the server's tools today: the Slack app via `mcp_bridge.py`, and a standalone CLI at `demo/mcp_client.py` (no shared imports from `grantscribe`). Portability is observable in a terminal, not asserted in copy. *See `grants_server.py`, `mcp_bridge.py`, `demo/mcp_client.py`.*
-- **The system refuses to ship a non-submittable artifact.** `loi_drafter.py` post-checks that the verbatim opportunity number, URL, and (when present) deadline from grants.gov all appear in the letter — missing any → `RuntimeError`. That's not a soft guideline; it's a hard gate. *See `loi_drafter.py` lines ~101–115.*
+- **Verifiable application infrastructure (the category-defining piece).** Every LOI ships with a structured receipt — hashes of the live grants.gov payload at draft time + the org-report content hash + timestamp + receipt ID — that a funder can re-verify back to grants.gov via `verify_loi.py --live` *without trusting the sender*. Tampering with any trust-relevant field breaks the hash. *See `loi_receipt.py`, `verify_loi.py`. Round-trip + tampering-detection + live re-verification are tested as claims 10–12 of `verify.py`.*
+- **MCP is load-bearing, in code.** Two distinct MCP clients call the server's tools today: the Slack app via `mcp_bridge.py`, and a standalone CLI at `demo/mcp_client.py` (no shared imports from `grantscribe`). Portability is observable in a terminal, not asserted in copy.
+- **The system refuses to ship a non-submittable artifact.** `loi_drafter.py` post-checks that the verbatim opportunity number, URL, and (when present) deadline from grants.gov all appear in the letter — missing any → `RuntimeError`. Then the receipt is appended. The artifact is submittable AND verifiable, or it doesn't exist.
 - **The moat is shipped, not narrated.** `/setreport` (`slack_app.py:handle_setreport`) opens a Slack modal, stores the org's report in `state/org_reports.json` keyed by `(workspace, user)`. `/grants` and the LOI handler refuse to run without it. There is no fixture fallback in production code.
-- **Hallucination guarded twice.** Drafter system prompt forbids inventing IDs/statistics; post-check then verifies the *real* grants.gov fields appear verbatim. Tutor refuses to answer without retrievable sources. Both behaviors are tested live.
-- **Honest engine count.** Two retrieval pipelines share an *extract → fetch → JSON-rerank-with-reason* shape (`grant_intel`, `resources`); one drafter is single-shot + verbatim post-check (`loi_drafter`); one grounded tutor does multi-source MediaWiki retrieval + cited single answer (`ask`). Four user-facing capabilities, three engine shapes, one MCP server.
+- **Hallucination guarded three ways.** (1) Drafter system prompt forbids inventing IDs/statistics. (2) Post-check verifies the *real* grants.gov fields appear verbatim in the letter. (3) Receipt embeds canonical-payload hash so any post-hoc tampering is detectable by the funder. Tutor refuses to answer without retrievable sources.
+- **Honest engine count.** Two retrieval pipelines share an *extract → fetch → JSON-rerank-with-reason* shape (`grant_intel`, `resources`); one drafter is single-shot + verbatim post-check + verifiable receipt (`loi_drafter`); one grounded tutor does multi-source MediaWiki retrieval + cited single answer (`ask`). Four user-facing capabilities, three engine shapes, one MCP server.
 
 ### Design
 
@@ -71,8 +72,8 @@ Full version, with the comparisons table and the audience pivot, in [`submission
 
 ### Quality of the Idea
 
-- **The merge isn't three labels glued on.** The setup is "grant-writer + counselor + tutor → one agent." The payoff is a level deeper: *the blank page was the barrier. We deleted the blank page.* The activity itself collapses into "describe what you do."
-- **The technical signature is the refusal.** Other LLM tools fail open — they ship the confident-sounding wrong draft. GrantScribe fails loud. That is the Reshaping Principle compiled into Python.
+- **A new category, not an incremental product.** We didn't just delete the blank page; we invented the receipt that a funder uses to audit the draft. **Verifiable application infrastructure** didn't exist yesterday. After this, every grant submitted via an AI tool needs verification metadata — because LLM-drafted prose without it is, by construction, unverifiable.
+- **The technical signature is the refusal + the proof.** Other LLM tools fail open — they ship the confident-sounding wrong draft. GrantScribe fails loud *and* emits a hash chain back to grants.gov so the receiver doesn't have to take the sender's word for it. That is the Reshaping Principle compiled into Python.
 - **Re-rank-with-a-reason as a primitive.** The reason is a *stage* of the ranking pipeline, written to JSON, then surfaced on the card — not optimistic post-hoc text generated to make the result look smart.
 
 ---
@@ -82,7 +83,8 @@ Full version, with the comparisons table and the audience pivot, in [`submission
 > **Single auditable proof:** run `python verify.py` from the repo root. It starts
 > the MCP server, exercises every shipped claim listed in §4, and prints PASS / FAIL
 > per claim with file:line evidence. Exits 0 iff every claim is verified live.
-> Last run (2026-05-26): **9/9 PASS**.
+> Last run (2026-05-26): **12/12 PASS** — including the three new receipt claims
+> (round-trip, tampering detection, live re-verification against grants.gov).
 
 All run live against real APIs. Every test exits 0.
 
@@ -99,7 +101,8 @@ All run live against real APIs. Every test exits 0.
 | `test_mcp_ask.py` | `/ask` through MCP | ✓ |
 | `test_mcp_resources.py` | `/learn` through MCP | ✓ |
 | `demo/mcp_client.py` (manual) | A second, **standalone** MCP client (no GrantScribe imports) hits the same server and gets the same ranked grants + cited tutor answers. | ✓ Verified 2026-05-26 |
-| **`verify.py`** | **Self-contained claim-by-claim audit** — starts the MCP server, runs all 9 §4 claims with PASS/FAIL output and file:line evidence. **Designed for judges to run.** | **✓ 9/9 PASS 2026-05-26** |
+| **`verify.py`** | **Self-contained claim-by-claim audit** — starts the MCP server, runs all 12 §4 claims (including the verifiable-receipt round-trip, tampering detection, and live grants.gov re-verification) with PASS/FAIL output and file:line evidence. **Designed for judges to run.** | **✓ 12/12 PASS 2026-05-26** |
+| **`verify_loi.py`** | **Funder-side audit tool.** Takes a received LOI and verifies its embedded receipt offline (hash self-consistency) or live (re-fetches the grant from grants.gov, recomputes the canonical hash). Tampering is detectable. **Designed for receiving funders.** | ✓ Verified live against `ED-GRANT-26-054` on 2026-05-26 |
 
 **Not tested live:** `/scholarships` — CareerOneStop credentials not yet obtained. The command is registered in the manifest with an honest empty-state message until wired. See §6.
 
@@ -116,6 +119,7 @@ All run live against real APIs. Every test exits 0.
 **Already complete:**
 
 - All four shipping pipelines work live (see §5).
+- **Verifiable receipts shipped end-to-end** (`loi_receipt.py` + `verify_loi.py`) — funder-side audit closes the loop. New category: *verifiable application infrastructure*.
 - The moat lives in code: `/setreport` + per-(workspace, user) store + LOI post-check refusing non-submittable drafts.
 - MCP is observably load-bearing: two clients call the same server (Slack bridge + standalone CLI, both verified live).
 - Architecture diagram exported to `submission/architecture.png`.

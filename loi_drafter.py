@@ -14,6 +14,8 @@ from pathlib import Path
 from dotenv import load_dotenv
 from openai import OpenAI
 
+from loi_receipt import build_receipt
+
 load_dotenv(Path(__file__).with_name(".env"))
 
 _BASE_URL = os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
@@ -116,4 +118,10 @@ def draft_loi(grant: dict, org_report: str) -> str:
             f"draft_loi output is missing verbatim grants.gov field(s): {missing} — "
             "refusing to return a non-submittable draft"
         )
-    return letter
+
+    # Verifiable receipt: every LOI carries a structured block the funder can
+    # verify back to grants.gov (offline or live). This is the cryptographic
+    # version of the procedural "no hallucination" guarantee — the funder no
+    # longer has to trust the sender to know the opportunity is real.
+    receipt = build_receipt(grant, org_report)
+    return letter + "\n\n" + receipt

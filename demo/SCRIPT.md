@@ -110,19 +110,45 @@ with the cursor in this order:
 
 ---
 
-### 1:35 – 2:00 · MCP from a second client — portability, on camera (25s)
-**On screen:** Cut to the spare terminal next to Slack. Type and run:
+### 1:35 – 2:10 · The receipt — funder-side audit, on camera (35s)
+**On screen:** Scroll the Slack LOI all the way down past the signature, past the deadline. The
+receipt block is right there: `--- BEGIN GRANTSCRIBE RECEIPT ---` … `grant_canonical_sha256: …`
+… `--- END GRANTSCRIBE RECEIPT ---`. Pause and **highlight the hash with the cursor**.
+
+**Voiceover:**
+> Every Letter of Intent ships with a verification receipt — hashes of the live grants.gov
+> payload, the org-report content hash, a timestamp.
+
+**On screen:** Save the LOI to `received_loi.txt`. Cut to a terminal. Type and run:
+```
+python verify_loi.py --letter received_loi.txt --live
+```
+
+**Voiceover (over the terminal output):**
+> A funder runs *one command*. The script re-fetches the grant from grants.gov,
+> recomputes the canonical hash from the live payload, and confirms it matches the receipt.
+> **PASS.** The funder didn't have to trust the sender. The application is anchored in a real
+> opportunity that existed at draft time. Try to tamper with the opportunity number — the hash
+> breaks.
+>
+> *(beat)*
+>
+> This is the new category. **Verifiable application infrastructure.** After this, every grant
+> submitted via an AI tool needs metadata like this — and every funder will require it.
+
+**On screen:** The terminal shows the PASS lines, then optionally cut to a second invocation
+where you manually edited the opportunity number — `verify_loi.py` says FAIL with hash mismatch.
+That's the receipt earning its keep, on camera.
+
+### 2:10 – 2:25 · MCP from a second client — portability (15s)
+**On screen:** Same terminal, type and run:
 ```
 python demo/mcp_client.py find-grants "youth refugee tutoring Ohio"
 ```
 
 **Voiceover:**
-> The same MCP tools, called from a completely separate process — no imports from the
-> GrantScribe codebase. Same ranked grants, same opportunity numbers, same reasons. **MCP isn't
-> a sticker. It's two proven clients today, with Claude desktop next.**
-
-**On screen:** The terminal prints the ranked results with the verbatim RE: numbers visible.
-Hold for ~5 seconds so the judge sees them.
+> The same MCP tools, called from a separate process — no imports from the GrantScribe codebase.
+> Same ranked grants, same opportunity numbers, same reasons. MCP is observable, not asserted.
 
 ---
 
@@ -158,14 +184,19 @@ linked Wikibooks/Wikiversity URLs.
 
 ---
 
-### 2:45 – 2:55 · Close (10s)
-**On screen:** Cut back to Slack. Final still: tagline + repo URL.
+### Close (~15s)
+**On screen:** Cut back to Slack. Final still: tagline + repo URL. Optional: `python verify.py`
+running with "12/12 PASS" visible in the corner.
 
 **Voiceover:**
-> A grant-writer. A college counselor. A tutor. Three people the wealthy hire — inside the
-> place people already work.
+> We didn't build another grants chatbot. **We deleted the blank page, and we invented the
+> receipt.** After this, every grant submitted by an AI tool needs verification metadata. We
+> built the first one.
+
+> *(beat)*
 >
-> Built for the Slack Agent Builder Challenge. The application is no longer the barrier.
+> Three professionals the wealthy hire, inside one Slack channel — with a receipt the funder
+> can verify. Built for the Slack Agent Builder Challenge — *Agent for Good.*
 
 ---
 

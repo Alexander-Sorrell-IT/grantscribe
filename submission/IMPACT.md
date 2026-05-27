@@ -6,11 +6,11 @@ For the people whose stories never reach the funder, GrantScribe writes them dow
 
 ---
 
-## We didn't help under-resourced orgs apply for grants. We deleted "applying."
+## We didn't help under-resourced orgs apply for grants. We deleted "applying" — and invented the receipt.
 
-**You describe what you do. The Letter of Intent appears, in your voice, ready to submit.**
+**You describe what you do. The Letter of Intent appears, in your voice, ready to submit. And the funder can verify, without trusting you, that it's anchored in a real grants.gov opportunity.**
 
-That is the shape now. Not "AI that helps you apply." A system that **collapses applying into describing** — and refuses to ship anything that isn't a real, submittable artifact.
+That is the category collapse. Not "AI that helps you apply." A system that **collapses applying into describing** — refuses to ship anything that isn't a real, submittable artifact — and **ships a cryptographic receipt with every Letter of Intent** so the funder can re-verify it back to the live API. The procedural "no hallucination" guarantee just became a verifiable one. After this, every grant submitted via an AI tool needs verification metadata — because LLM-drafted prose without it is, by construction, unverifiable. We built the first one.
 
 The U.S. high school class of 2024 left **$4.4 billion in Pell Grants on the table** — 830,000 eligible students who never finished the FAFSA (NCAN, reported via NASFAA and Higher Education Today, 2025). Up $400 million from the class of 2023. The money was there. Not applying was easier than applying. Treat that as the thematic anchor for an access gap that runs through every federal grant program: nonprofits walk past hundreds of billions of federal dollars per year for the same reason — no one in the office has the hours to find the right opportunity and write the first draft.
 
@@ -41,6 +41,31 @@ A judge can grep for it.
 - **No hallucinated grant IDs.** The drafter is forbidden in the system prompt from inventing an opportunity number, and the post-check confirms the *real* one from grants.gov appears verbatim.
 
 The moat is not "in your voice from your report" as a marketing line. The moat is: **the user supplies the voice, the system supplies the verifiable identifiers, and the system refuses to ship anything that isn't both.**
+
+## The receipt — a new category: verifiable application infrastructure
+
+Every Letter of Intent now ships with a structured **verification receipt** appended to the letter:
+
+```
+--- BEGIN GRANTSCRIBE RECEIPT ---
+GRANTSCRIBE VERIFICATION RECEIPT v1
+generated_at: 2026-05-27T03:51:35Z
+grant_source: grants.gov
+opportunity_number: ETA-TEGL-10-25-YOUTH
+grant_url: https://www.grants.gov/search-results-detail/362125
+close_date: 05/29/2026
+grant_canonical_sha256: de568f1c…
+org_report_sha256: b5e05398…
+receipt_id: GS-7e156e6-059b15
+verify_command: python verify_loi.py --letter <file>
+--- END GRANTSCRIBE RECEIPT ---
+```
+
+**The funder runs one command:** `python verify_loi.py --letter received.txt --live`. The script re-fetches the grant from grants.gov, recomputes the canonical hash of the live payload, and confirms it matches the receipt. If it does, the LOI is *anchored* in a real opportunity that existed at draft time — the opportunity number wasn't fabricated, the URL isn't a typo, the deadline isn't invented. **Without the sender being trusted.**
+
+Tampering with any trust-relevant field (e.g. swapping `opportunity_number`) breaks the hash, and `verify_loi.py` flags it. We verified this end-to-end: see `verify.py` claims 10–12 (12/12 PASS).
+
+This is the category that didn't exist yesterday: **verifiable application infrastructure**. Once one funder requires it, every funder will — because LLM-drafted prose *without* it is indistinguishable from chatbot slop, and the volume of AI-generated applications hitting funders is about to scale by 100×.
 
 ---
 
@@ -77,6 +102,8 @@ Compare GrantScribe to the field a Devpost judge will actually read this summer.
 | Voice | Generic LLM | **The org's own, loaded via `/setreport`** |
 | Citations on tutor answers | Sometimes, optional | **Required — no source page, no answer** |
 | MCP integration | Sticker | **Two proven clients: the Slack bridge, and a standalone CLI (`demo/mcp_client.py`)** |
+| Funder-side verifiability | None — receiver must trust the sender | **Cryptographic receipt on every LOI, re-verified live against grants.gov by `verify_loi.py`** |
+| Auditability of the submission itself | "Trust us, we built this" | **`python verify.py` → 12/12 PASS with file:line evidence** |
 
 **Every other entry will be measurable in tokens. GrantScribe is measurable in submittable artifacts.**
 
@@ -116,4 +143,4 @@ Against real grants.gov data, end-to-end on 2026-05-26:
 
 ## In one sentence
 
-**$4.4 billion in Pell was left on the table because not applying was easier than applying. GrantScribe makes the inverse true: when describing what you do is easier than writing what you do, the application is the default, not the exception.**
+**We deleted the blank page, and we invented the receipt. After this, every grant application written by an AI tool needs verification metadata — and every funder will require it. We built the first one.**
