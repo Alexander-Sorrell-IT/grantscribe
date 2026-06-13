@@ -5,7 +5,7 @@
 text area on the form.*
 
 ## Inspiration
-A grant-writer. A college counselor. A tutor. Three people the wealthy hire, three people the underserved can't afford — and the U.S. high school class of 2024 left **$4.4 billion in Pell Grants on the table** because 830,000 eligible students never finished the application (NCAN, 2025). The money was sitting there. **Not applying was easier than applying.**
+A grant-writer. A college counselor. A tutor. Three roles most people can't afford — and the U.S. high school class of 2024 left **$4.4 billion in Pell Grants on the table** because 830,000 eligible students never finished the application (NCAN, 2025). The money was sitting there. **Not applying was easier than applying.**
 
 So we stopped trying to build "a grants chatbot," and stopped writing copy about "helping people apply." We removed the act of applying.
 
@@ -14,21 +14,23 @@ So we stopped trying to build "a grants chatbot," and stopped writing copy about
 
 Run `/setreport` once and paste any prior grant report or annual report — that's the org's voice, stored privately per workspace. Then type `/grants youth refugee tutoring in Ohio — need operating funds`. Behind that one line: a tight grants.gov query, expired listings dropped, an LLM re-rank for true fit *with the reason shown on the card before you click anything*, and on one click, a Letter of Intent in **the organization's own voice** — grounded in their cities, programs, student counts, and partners lifted from the report you just pasted. The opportunity number, the grants.gov URL, and the submission deadline are copied verbatim from the live API. The drafter is forbidden in the prompt from inventing statistics or grant IDs — and `loi_drafter.py` **raises `RuntimeError` if the verbatim opportunity number, URL, or deadline aren't all present in the letter.** The artifact is submittable or it doesn't exist.
 
-The same agent ships three other capabilities: `/scholarships` (the college-counselor pillar, pointed at U.S. DOL CareerOneStop — same drafting shape applied to scholarship essays, pending the free CareerOneStop token); `/learn` (free, level-matched textbooks from the Internet Archive plus curated providers — OpenStax, MIT OCW, Khan, freeCodeCamp); and `/ask` — a tutor that answers **only from Wikibooks and Wikiversity, always with citations**, and returns `null` rather than make a fact up.
+The same agent ships three other capabilities. The second pillar — careers, not scholarships — runs **live on U.S. DOL CareerOneStop**: there is no free public scholarship API, so we built the route that actually removes the money barrier. `/training` returns real accredited programs and the credential each one grants; `/pathway` maps a goal job → a real O*NET occupation → the credential it needs → real funded ETPL programs near you, and emits a re-verifiable plan. Then `/learn` (free, level-matched textbooks from the Internet Archive plus curated providers — OpenStax, MIT OCW, Khan, freeCodeCamp); and `/ask` — a tutor that answers **only from Wikibooks and Wikiversity, always with citations**, and returns `null` rather than make a fact up.
 
 Every capability is exposed through a load-bearing MCP server. Two distinct MCP clients call the same tools today — the Slack app's MCP bridge in production, and `demo/mcp_client.py` (a standalone CLI that doesn't import anything from the GrantScribe codebase, proving portability). Any MCP-aware surface that comes next — Claude desktop, Slack's own MCP client — works the same way.
 
 The merge isn't *"three professionals in one agent."* That's the setup. The payoff is one level deeper: **the blank page was the barrier. We deleted the blank page** — and then we invented the **receipt**.
 
-Every LOI now ships with a structured verification receipt appended to the letter: hashes of the live grants.gov payload at draft time, the org-report content hash, a timestamp, and a receipt ID. A funder runs `python verify_loi.py --letter received.txt --live` and the script re-fetches the grant from grants.gov, recomputes the canonical hash of the live payload, and confirms it matches the receipt. **Without the funder having to trust the sender.** Tampering with any trust-relevant field breaks the hash. We didn't just build a grants chatbot — we invented **verifiable application infrastructure**. After this, every grant submitted via an AI tool needs verification metadata, and we shipped the first one.
+Every LOI now ships with a structured verification receipt appended to the letter: a canonical hash of the live grants.gov payload at draft time, the org-report content hash, a timestamp, and a receipt ID. A funder runs `python verify_loi.py --letter received.txt --live` and the script re-fetches the grant from grants.gov, recomputes the canonical hash of the live payload, and confirms it matches the receipt. **Without the funder having to trust the sender.** Tampering with the opportunity number, URL, or deadline breaks the hash.
+
+And we built it a second time. `/pathway` emits its own receipt — the program, school, credential, CIP code, and DetailId of a real U.S. DOL CareerOneStop ETPL listing — and a funder re-verifies it with `python verify_pathway.py --plan received.txt --live`, which re-fetches the program from CareerOneStop by DetailId and confirms the hash matches. Tampering with the program, school, credential, or DetailId breaks the hash. **Two receipts, one pattern: draft, then prove.** We didn't just build a grants chatbot — we invented **verifiable application infrastructure**. After this, every artifact submitted via an AI tool needs verification metadata, and we shipped the first ones.
 
 ## How we built it
 - **Slack agent** — Bolt (Python), Socket Mode, slash commands + Block Kit cards + action buttons + a paste-your-report modal (`/setreport`).
-- **MCP server, load-bearing in code** — `grants_server.py` exposes `find_grants`, `draft_loi`, `find_resources`, `answer_question` as MCP tools. Two distinct clients call them today: the Slack app via `mcp_bridge.py`, and a standalone CLI at `demo/mcp_client.py` that has zero imports from the GrantScribe codebase. Portability is demonstrated, not promised.
-- **Three engine shapes under four commands, honest version** — two retrieval pipelines share an *extract → fetch → JSON-rerank-with-reason* shape (`grant_intel`, `resources`); one drafter is single-shot generation + verbatim post-check (`loi_drafter`); one grounded tutor does multi-source MediaWiki retrieval + cited single answer (`ask`).
+- **MCP server, load-bearing in code** — `grants_server.py` exposes eight MCP tools: `search_grants`, `find_grants`, `draft_loi`, `find_resources`, `find_training`, `build_pathway`, `draft_pathway_plan`, `answer_question`. Two distinct clients call them today: the Slack app via `mcp_bridge.py`, and a standalone CLI at `demo/mcp_client.py` that has zero imports from the GrantScribe codebase. Portability is demonstrated, not promised.
+- **Four engine shapes, honest version** — two retrieval pipelines share an *extract → fetch → JSON-rerank-with-reason* shape (`grant_intel`, `resources`); one workforce pipeline is a *deterministic CareerOneStop composition* — goal job → real O\*NET occupation → credential → enrollable local programs, no LLM in the loop (`pathway`/`training`); two drafters are single-shot generation + verbatim post-check that **raises `RuntimeError` rather than ship a draft that misnames the funded grant or program** (`loi_drafter`, `pathway_drafter`); one grounded tutor does multi-source MediaWiki retrieval + cited single answer (`ask`).
 - **Per-(workspace, user) report store** — `/setreport` opens a modal, writes to `state/org_reports.json` (git-ignored). `/grants` refuses to draft if the user hasn't set a report. No fixtures, no fictional fallback.
 - **DeepSeek V4** — Flash for query extraction + re-ranking; Pro for drafting in voice.
-- **Live, free data** — grants.gov, CareerOneStop (pending free token), Internet Archive, Wikibooks/Wikiversity.
+- **Live, free data** — grants.gov, CareerOneStop (U.S. DOL ETA Training/Occupation APIs, live — powering `/training` and `/pathway`), Internet Archive, Wikibooks/Wikiversity.
 - **Principles, enforced in code** — no fabricated data, grounded + cited answers, no hallucinated grant IDs, no silent fallbacks (MCP tool errors raise; LOI post-check raises if any verbatim identifier is missing); secrets stay in a git-ignored `.env`; private user content stays in a git-ignored `state/`.
 
 ## Challenges we ran into
@@ -41,7 +43,7 @@ Every LOI now ships with a structured verification receipt appended to the lette
 - **We invented verifiable application infrastructure.** Every LOI ships with a structured receipt that a funder can re-verify back to live grants.gov data with one command (`verify_loi.py`). No other LLM-based grant tool does this. After this, every funder will require it.
 - **A submittable artifact, not a chatbot transcript.** `loi_drafter.py`'s post-check refuses to return a draft missing the verbatim opportunity number, URL, or deadline. Other LLM tools fail open; this one fails loud. That's the Reshaping Principle in five lines of Python.
 - **The moat is in code, not in copy.** `/setreport` ships the voice-from-the-user's-own-report mechanism end-to-end. No fixtures. No fictional fallback Ohio nonprofit. The thing the pitch promises is the thing the code does.
-- **The submission is itself auditable.** `python verify.py` exercises 12 shipped claims live (including the receipt round-trip, the tampering detection, and the live grants.gov re-fetch). 12/12 PASS. Judges don't have to trust the submission — they can run it.
+- **The submission is itself auditable.** `python verify.py` exercises 23 shipped claims live — both receipts round-trip and tamper-detect, the LOI re-fetches from grants.gov, `/training` and `/pathway` run on the live DOL CareerOneStop APIs, and the pathway plan re-verifies to the CareerOneStop ETPL by DetailId via `verify_pathway.py`. 23/23 PASS. Judges don't have to trust the submission — they can run it.
 - **MCP earned its keep.** Two distinct MCP clients call the same tools — the Slack bridge in production and a standalone CLI with no internal imports. Portability is observable.
 
 ## What we learned
@@ -51,7 +53,7 @@ Every LOI now ships with a structured verification receipt appended to the lette
 - **MCP makes capabilities portable, demonstrably.** The same tools we built for Slack are usable from a separate process with no shared imports.
 
 ## What's next for GrantScribe
-Full scholarship rollout (CareerOneStop token in hand), a guided "next steps to apply" checklist
+Signed receipts (HMAC/PKI, hardening today's content hash), a guided "next steps to apply" checklist
 after each draft, and more open-learning sources. Beyond Slack, the MCP server already works
 with any MCP-aware client.
 

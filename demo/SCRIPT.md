@@ -1,20 +1,25 @@
-# GrantScribe — Demo Video Script (~3 minutes)
+# GrantScribe — Demo Video Script (the recorded trailer runs ~2:30)
 
-Devpost wants ~3 minutes that **shows the working project**. This script is timed for ~2:55. The
+Devpost wants ~3 minutes that **shows the working project**. The shipped trailer
+(`demo/out/GrantScribe_trailer.mp4`, ~2:30, per-block voiceover) is built around this script. The
 demo is built around the single sentence the product delivers: **"You describe what you do. The
 Letter of Intent appears, in your voice, ready to submit."** Every scene either sets up that
 sentence or pays it off.
 
-`/scholarships` is mentioned, not demoed — CareerOneStop credentials are pending. `/learn` is also
-intentionally cut from the main act to keep the judge's "one thing they remember next week" sharp.
-The two visible capabilities are `/grants → Draft LOI` (the main act) and `/ask` (proof that the
-same engine writes the tutor with citations).
+`/scholarships` is mentioned, not demoed — and the honest reason is the point: there is no free
+public scholarship API to call, so the handler tells the truth and routes you to the funded paths
+that do ship. The real second pillar is live and demoable: `/training` and `/pathway` run against
+the U.S. DOL CareerOneStop ETPL, and `/pathway` emits a second verifiable receipt — re-checkable by
+DetailId via `verify_pathway.py`. `/learn` is also intentionally cut from the main act to keep the
+judge's "one thing they remember next week" sharp. The two visible capabilities are
+`/grants → Draft LOI` (the main act) and `/ask` (proof that the same engine writes the tutor with
+citations).
 
 ---
 
-## Pre-flight checklist (do this BEFORE you hit record)
+## Pre-flight checklist (only if you re-record — the shipped trailer is already in `demo/out/`)
 
-1. `.env` filled: `DEEPSEEK_API_KEY`, `SLACK_BOT_TOKEN`, `SLACK_APP_TOKEN` (CareerOneStop optional).
+1. `.env` filled: `DEEPSEEK_API_KEY`, `SLACK_BOT_TOKEN`, `SLACK_APP_TOKEN`, plus `CAREERONESTOP_USERID` and `CAREERONESTOP_TOKEN` — the CareerOneStop creds are live and power `/training` and `/pathway` (U.S. DOL ETA Training/Occupation APIs); omit them and those two commands go dark.
 2. **Three things running, in three terminals / windows:**
    - `PYTHONPATH=. uv run --with-requirements requirements.txt python grants_server.py`
    - `PYTHONPATH=. uv run --with-requirements requirements.txt python slack_app.py`
@@ -28,7 +33,7 @@ same engine writes the tutor with citations).
 6. Have `submission/architecture.png` open in a separate browser tab — you'll cut to it once.
 7. Recorder: OBS or QuickTime, 1080p, 30fps, capture system audio + mic.
 
-> **Honesty note:** the demo runs against **live** APIs (grants.gov, Wikibooks, DeepSeek).
+> **Honesty note:** the demo runs against **live** APIs (grants.gov, the U.S. DOL CareerOneStop ETPL, Wikibooks/Wikiversity, DeepSeek).
 > Results will differ slightly between takes — that's fine and proves it isn't faked. Don't
 > re-record because the top grant changed.
 
@@ -152,7 +157,7 @@ python demo/mcp_client.py find-grants "youth refugee tutoring Ohio"
 
 ---
 
-### 2:00 – 2:25 · `/ask` — the tutor that cites or refuses (25s)
+### 2:25 – 2:50 · `/ask` — the tutor that cites or refuses (25s)
 **On screen:** Back in Slack. Type and send:
 ```
 /ask what is photosynthesis?
@@ -171,7 +176,7 @@ linked Wikibooks/Wikiversity URLs.
 
 ---
 
-### 2:25 – 2:45 · The pattern — one MCP server, four jobs (20s)
+### 2:50 – 3:10 · The pattern — one MCP server, seven jobs (20s)
 **On screen:** Cut to the architecture diagram (`submission/architecture.png`) full-screen.
 
 **Voiceover:**
@@ -179,14 +184,15 @@ linked Wikibooks/Wikiversity URLs.
 > from live free data, re-rank with a reason, draft in the user's voice — or, in the tutor's
 > case, ground in cited sources and refuse to answer otherwise.
 >
-> Four user-facing capabilities. One MCP server. Two MCP clients calling it today. Honest tech,
-> honest claims, honest code.
+> Seven slash commands. One MCP server. Two MCP clients calling it today. Two verifiable
+> receipts — the LOI re-checkable to grants.gov, the /pathway plan re-checkable to the DOL
+> CareerOneStop ETPL. Honest tech, honest claims, honest code.
 
 ---
 
 ### Close (~15s)
-**On screen:** Cut back to Slack. Final still: tagline + repo URL. Optional: `python verify.py`
-running with "12/12 PASS" visible in the corner.
+**On screen:** Cut back to Slack. Final still: tagline + repo URL. Show `python verify.py`
+running with "23/23 PASS" visible in the corner.
 
 **Voiceover:**
 > We didn't build another grants chatbot. **We deleted the blank page, and we invented the
@@ -195,8 +201,8 @@ running with "12/12 PASS" visible in the corner.
 
 > *(beat)*
 >
-> Three professionals the wealthy hire, inside one Slack channel — with a receipt the funder
-> can verify. Built for the Slack Agent Builder Challenge — *Agent for Good.*
+> A grant writer, a workforce navigator, and a tutor — inside one Slack channel, with a receipt the
+> funder can verify. Built for the Slack Agent Builder Challenge — *Agent for Good.*
 
 ---
 
@@ -219,15 +225,32 @@ These match the inputs already used in `test_loi.py`, `test_mcp_bridge.py`, and
 
 ---
 
-## Optional add-on — if CareerOneStop tokens arrive before recording
+## Optional add-on — the second receipt, if you have 20s to spare
 
-Insert a 20s `/scholarships` beat between the `/grants` LOI and the MCP-client beat, showing the
-same drafting shape applied to a scholarship essay. Trim the architecture scene by 20s to keep
-total under 3:00.
+There is no free public scholarship API — CareerOneStop has none, and the others are paywalled or
+have no live host. So the honest second pillar isn't a scholarship search; it's the live workforce
+engine that already ships. `/training` and `/pathway` run against the U.S. Department of Labor
+CareerOneStop ETPL, and `/pathway` earns its own re-verifiable receipt — the Reshaping Principle,
+run a second time.
+
+If timing allows, insert a 20s `/pathway` beat between the `/grants` LOI and the MCP-client beat.
+Trim the architecture scene by 20s to keep total under 3:00.
 
 ```
-/scholarships first-generation student in Texas, intended engineering major, household income under $40k
+/pathway registered nurse near 45241
 ```
+
+On screen: `/pathway` maps the goal job to a real O*NET occupation, names the credential it
+requires, and lists real local ETPL programs. Click **Draft my plan** on one — the plan drafts in
+the org's own voice and ships a second receipt block. Cut to a terminal and run:
+
+```
+python verify_pathway.py --plan received_plan.txt --live
+```
+
+The script re-fetches the program from CareerOneStop by `detail_id` and confirms the canonical hash
+matches the receipt. Two receipts, one pattern: draft, then prove. Tamper with the program, school,
+or `detail_id` and the hash breaks — same content-hash scope as the LOI receipt.
 
 ---
 
@@ -236,4 +259,4 @@ total under 3:00.
 - Lower-third text for each scene tag (`/setreport`, `/grants`, `mcp_client`, `/ask`).
 - Mute any system notification sounds.
 - Export 1080p MP4, ≤ ~150 MB so it uploads quickly to Devpost.
-- Drop the file in `demo/` (e.g., `demo/grantscribe-demo.mp4`).
+- The shipped trailer is already built at `demo/out/GrantScribe_trailer.mp4` (~13.8 MB, ~2:30).

@@ -19,3 +19,13 @@ venv/
 
 # os
 .DS_Store
+demo/slack_session.json
+demo/.slack_profile/
+demo/recordings/
+demo/recordings_slack/
+demo/rec_intro/
+demo/rec_outro/
+
+# demo build artifacts (regenerable; 227MB incl. a 116MB Piper voice model that
+# exceeds GitHub's 100MB file limit — the trailer ships via a hosted Devpost link)
+demo/out/

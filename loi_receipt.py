@@ -153,9 +153,13 @@ def verify_receipt_offline(receipt: dict) -> dict:
     """
     checks = []
 
+    # close_date is intentionally NOT required-non-empty: real grants.gov standing
+    # announcements have no posted deadline, and an empty close_date is still
+    # bound by grant_canonical_sha256 (it's in _GRANT_HASH_FIELDS). Requiring it
+    # here made valid receipts for deadline-less grants fail the funder's verify.
     required = (
         "generated_at", "grant_source", "opportunity_number", "grant_url",
-        "close_date", "grant_canonical_sha256", "org_report_sha256", "receipt_id",
+        "grant_canonical_sha256", "org_report_sha256", "receipt_id",
     )
     missing = [k for k in required if not receipt.get(k)]
     checks.append({

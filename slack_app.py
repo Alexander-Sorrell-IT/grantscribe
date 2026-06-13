@@ -17,6 +17,7 @@ your report) is shipped in code, not asserted in copy.
 """
 import json
 import os
+import re
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -28,6 +29,9 @@ from mcp_bridge import (
     mcp_draft_loi as draft_loi,
     mcp_find_grants as find_grants,
     mcp_find_resources as find_resources,
+    mcp_find_training as find_training,
+    mcp_build_pathway as build_pathway,
+    mcp_draft_pathway_plan as draft_pathway_plan,
 )
 from report_store import get_report, set_report
 
@@ -35,6 +39,20 @@ load_dotenv(Path(__file__).with_name(".env"))
 
 
 app = App(token=os.environ["SLACK_BOT_TOKEN"])
+
+
+_LOCATION_RE = re.compile(r"^\d{5}$|^.+,\s*[A-Za-z]{2}$")  # ZIP or "City, ST"
+
+
+def _split_near(text: str) -> tuple[str, str]:
+    """Split `<keyword> near <location>` only when the suffix is a real location
+    (ZIP or 'City, ST'). Otherwise the whole text is the keyword (nationwide) —
+    so plain phrasing like 'nursing near downtown' isn't mangled into a bad query."""
+    keyword, sep, loc = text.partition(" near ")
+    loc = loc.strip()
+    if sep and _LOCATION_RE.match(loc):
+        return keyword.strip(), loc
+    return text.strip(), "0"
 
 
 def _chunk_sections(text: str, size: int = 2800) -> list[dict]:
@@ -97,7 +115,11 @@ def _setreport_modal_view() -> dict:
                         "Paste any prior grant report, annual report, or program write-up from your "
                         "organization. GrantScribe uses it to draft Letters of Intent *in your org's "
                         "own voice* — your cities, programs, populations, partners, and numbers — "
-                        "with hallucination forbidden in code.\n\n"
+                        "grounded in what you paste. The grant's number, URL, and deadline are "
+                        "checked in code to appear verbatim, or the draft is refused.\n\n"
+                        "*Applying as an individual?* Paste your own story instead — where you are, what "
+                        "you're good at, what you're aiming for — and `/pathway` will draft your funding "
+                        "plan in your voice.\n\n"
                         "Stays private to your workspace. You can re-run `/setreport` any time to update it."
                     ),
                 },
@@ -295,28 +317,220 @@ def handle_ask(ack, command, respond):
     respond(blocks=blocks, text="Tutor answer")
 
 
+def _training_card(p: dict) -> str:
+    where = ", ".join(x for x in (p["city"], p["state"]) if x)
+    school = f"<{p['url']}|{p['school']}>" if p["url"] else (p["school"] or "—")
+    cred = p["credential"] or p["award_level"] or "credential varies"
+    meta = "  •  ".join(x for x in (cred, p["format"], where) if x)
+    return f"• *{p['program'] or 'Program'}*\n  _{school}_  —  {meta}"
+
+
+def _pathway_program_card(program: dict, goal_occupation: str) -> list[dict]:
+    """A program card with a 'Draft my plan' button — produces a verifiable,
+    in-voice funding plan anchored to THIS CareerOneStop program."""
+    return [
+        {"type": "section", "text": {"type": "mrkdwn", "text": _training_card(program)}},
+        {
+            "type": "actions",
+            "elements": [
+                {
+                    "type": "button",
+                    "text": {"type": "plain_text", "text": "📝  Draft my plan"},
+                    "style": "primary",
+                    "action_id": "draft_pathway_plan",
+                    "value": json.dumps({"program": program, "goal": goal_occupation}),
+                }
+            ],
+        },
+        {"type": "divider"},
+    ]
+
+
+@app.command("/training")
+def handle_training(ack, command, respond):
+    ack()
+    text = (command.get("text") or "").strip()
+    if not text:
+        respond(
+            "Tell me what you want to train for — e.g. "
+            "`/training nursing` or `/training welding near 45241`"
+        )
+        return
+
+    # Optional "near <ZIP or City, ST>" suffix narrows to programs you can reach.
+    keyword, location = _split_near(text)
+
+    respond(
+        f"🎓 Finding real training programs for: _{keyword}_"
+        + (f" near *{location}*" if location != "0" else "")
+        + " …"
+    )
+    try:
+        result = find_training(keyword, location=location, rows=5)
+    except Exception as exc:  # surface, don't swallow
+        respond(f":warning: Training search failed: `{exc}`")
+        raise
+
+    if not result["programs"]:
+        respond(f"No training programs found for `{keyword}`. Try a broader term.")
+        return
+
+    listing = "\n".join(_training_card(p) for p in result["programs"])
+    blocks = [
+        {
+            "type": "section",
+            "text": {
+                "type": "mrkdwn",
+                "text": (
+                    f"🎓 *{len(result['programs'])} real training programs for "
+                    f"{result['keyword']}* — {result['count']:,} in the database:"
+                ),
+            },
+        },
+        {"type": "divider"},
+        *_chunk_sections(listing),
+        {
+            "type": "context",
+            "elements": [
+                {"type": "mrkdwn", "text": f"Source: {result['source']} (U.S. Department of Labor)"}
+            ],
+        },
+    ]
+    respond(blocks=blocks, text="Training programs")
+
+
+@app.command("/pathway")
+def handle_pathway(ack, command, respond):
+    ack()
+    text = (command.get("text") or "").strip()
+    if not text:
+        respond(
+            "Tell me the job you're aiming for — e.g. "
+            "`/pathway registered nurse near 45241`"
+        )
+        return
+
+    goal, location = _split_near(text)
+
+    respond(
+        f"🧭 Mapping your path to *{goal}*"
+        + (f" near *{location}*" if location != "0" else "")
+        + " …"
+    )
+    try:
+        p = build_pathway(goal, location=location, rows=4)
+    except Exception as exc:  # surface, don't swallow
+        respond(f":warning: Pathway lookup failed: `{exc}`")
+        raise
+
+    if not p["occupation"] and not p["programs"]:
+        respond(
+            f"Couldn't find a clear occupation or training for `{goal}`. "
+            "Try a common job title — e.g. `electrician`, `medical assistant`."
+        )
+        return
+
+    occ = p["occupation"]
+    job_line = (
+        f"🎯 *{occ['title']}* — a real occupation (O*NET {occ['onet_code']}), "
+        f"{p['occupation_matches']} related titles"
+        if occ
+        else f"🎯 *{p['goal']}*"
+    )
+    creds = ", ".join(p["credentials"]) or "varies by program"
+
+    blocks = [
+        {"type": "section", "text": {"type": "mrkdwn", "text": job_line}},
+        {
+            "type": "section",
+            "text": {"type": "mrkdwn", "text": f"🎓 *The credential you need:* {creds}"},
+        },
+    ]
+    goal_occupation = f"{occ['title']} (O*NET {occ['onet_code']})" if occ else p["goal"]
+    if p["programs"]:
+        blocks.extend([
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": (
+                        f"🏫 *Where to get it* — {len(p['programs'])} real programs"
+                        + (f" near {location}" if location != "0" else "")
+                        + f" (of {p['program_count']:,}). Click *Draft my plan* on any one:"
+                    ),
+                },
+            },
+            {"type": "divider"},
+        ])
+        for pr in p["programs"]:
+            blocks.extend(_pathway_program_card(pr, goal_occupation))
+    blocks.append(
+        {
+            "type": "context",
+            "elements": [
+                {"type": "mrkdwn", "text": f"Source: {p['source']} (U.S. Department of Labor)"}
+            ],
+        }
+    )
+    respond(blocks=blocks, text=f"Pathway to {goal}")
+
+
+@app.action("draft_pathway_plan")
+def handle_draft_pathway_plan(ack, body, respond):
+    ack()
+    payload = json.loads(body["actions"][0]["value"])
+    program = payload["program"]
+    goal = payload.get("goal", "")
+    team_id = body["team"]["id"]
+    user_id = body["user"]["id"]
+    story = get_report(team_id, user_id)
+    if not story:
+        respond(
+            ":warning: Before I can draft your plan *in your own voice*, run `/setreport` once and "
+            "paste your story — where you are, what you're good at, what you're aiming for. "
+            "It stays in your workspace. No fixtures, no fictional fallback."
+        )
+        return
+
+    respond(
+        f":writing_hand: Drafting your funding plan for *{program.get('program', 'this program')}* "
+        f"at *{program.get('school', '')}* in your own voice …"
+    )
+    try:
+        plan = draft_pathway_plan(program, story, goal_occupation=goal)
+    except Exception as exc:  # surface, don't swallow
+        respond(f":warning: Plan draft failed: `{exc}`")
+        raise
+
+    header = {
+        "type": "section",
+        "text": {
+            "type": "mrkdwn",
+            "text": f"*Your funded-path plan — {program.get('program', '')} @ {program.get('school', '')}*",
+        },
+    }
+    respond(blocks=[header, *_chunk_sections(plan)], text="Funded-path plan draft")
+
+
 @app.command("/scholarships")
 def handle_scholarships(ack, command, respond):
     """Placeholder until CareerOneStop credentials are wired.
 
-    Registered in the manifest so the three-professionals merge is truthful at the command level;
-    when CAREERONESTOP_USERID + CAREERONESTOP_TOKEN are in .env, this handler will delegate to the
-    same engine the LOI drafter uses.
+    Honest empty-state. Verified 2026-06-05: CareerOneStop's developer API has NO
+    scholarship service, and no free public scholarship API exists (others are
+    paywalled or have no live host). Rather than fake a source, point users to the
+    real, funded routes GrantScribe DOES deliver.
     """
     ack()
-    co_userid = os.environ.get("CAREERONESTOP_USERID", "").strip()
-    co_token = os.environ.get("CAREERONESTOP_TOKEN", "").strip()
-    if not (co_userid and co_token):
-        respond(
-            ":hourglass_flowing_sand: `/scholarships` (the college-counselor pillar) is the same engine "
-            "as `/grants`, pointed at the U.S. Department of Labor's CareerOneStop scholarship database. "
-            "It needs `CAREERONESTOP_USERID` and `CAREERONESTOP_TOKEN` in `.env` — free at "
-            "<https://www.careeronestop.org/Developers/WebAPI/registration.aspx|careeronestop.org/Developers>. "
-            "Once those are set, this command will draft your essay in your own voice the same way `/grants` "
-            "drafts the LOI."
-        )
-        return
-    respond(":warning: Live scholarship flow not yet wired. Credentials present but engine not connected.")
+    respond(
+        ":mag: *There's no honest scholarship search to give you yet.* We checked: "
+        "CareerOneStop's developer API has no scholarship service, and no free public "
+        "scholarship API exists. Rather than fake a database, here's what removes the "
+        "money barrier *for real*:\n"
+        "• `/pathway <job>` — the credential a job needs + real funded programs near you\n"
+        "• `/training <skill>` — real accredited training programs (U.S. DOL CareerOneStop)\n"
+        "• `/grants <what your org does>` — federal grants + an LOI drafted in your voice"
+    )
 
 
 if __name__ == "__main__":

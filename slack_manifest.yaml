@@ -1,6 +1,6 @@
 display_information:
   name: GrantScribe
-  description: Removes the money barrier to opportunity — finds grants & scholarships you qualify for (drafted in your voice) and free ways to learn anything.
+  description: Removes the money barrier — finds federal grants and drafts the LOI in your voice, plus real funded training to a credential near you.
   background_color: "#1a4d2e"
 features:
   bot_user:
@@ -16,12 +16,20 @@ features:
       usage_hint: what your org does + what you need
       should_escape: false
     - command: /scholarships
-      description: Find scholarships + draft the essay in the student's voice
-      usage_hint: about the student
+      description: Why there's no honest scholarship search yet — and the funded routes to use instead
+      usage_hint: (explains /pathway, /training, /grants)
       should_escape: false
     - command: /learn
       description: Find free ways to learn something
       usage_hint: what you want to learn
+      should_escape: false
+    - command: /training
+      description: Find real accredited training programs + the credential they grant (U.S. DOL CareerOneStop)
+      usage_hint: what to train for — e.g. nursing near 45241
+      should_escape: false
+    - command: /pathway
+      description: Map a goal job to the credential you need + real programs near you that grant it
+      usage_hint: the job you want — e.g. registered nurse near 45241
       should_escape: false
     - command: /ask
       description: Ask a learning question, answered from free open textbooks

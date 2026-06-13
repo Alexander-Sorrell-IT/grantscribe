@@ -20,7 +20,7 @@ Reshape the activity, and the gap inverts. When describing what you do is easier
 
 ## A grant-writer. A college counselor. A tutor.
 
-Three people the wealthy hire. Three people the underserved can't afford.
+Three roles most people can't afford. Three roles the underserved go without.
 
 - A grant-writer costs **$75–$150 an hour**; small nonprofits don't have one.
 - A college counselor costs **$150–$300 an hour**; first-generation students don't have one.
@@ -44,7 +44,7 @@ The moat is not "in your voice from your report" as a marketing line. The moat i
 
 ## The receipt — a new category: verifiable application infrastructure
 
-Every Letter of Intent now ships with a structured **verification receipt** appended to the letter:
+GrantScribe now emits **two verifiable receipts, not one** — the same draft-then-prove pattern, run twice. Every `/pathway` plan ships with a receipt re-verifiable to the U.S. DOL CareerOneStop ETPL by its `DetailId` (`verify_pathway.py --plan`, exercised by `verify.py` claims 17–21 and 23). Every Letter of Intent ships with one re-verifiable to grants.gov. The Reshaping Principle a second time: a plan you can re-check, not just generate. Here is the LOI receipt, appended to the letter:
 
 ```
 --- BEGIN GRANTSCRIBE RECEIPT ---
@@ -63,7 +63,7 @@ verify_command: python verify_loi.py --letter <file>
 
 **The funder runs one command:** `python verify_loi.py --letter received.txt --live`. The script re-fetches the grant from grants.gov, recomputes the canonical hash of the live payload, and confirms it matches the receipt. If it does, the LOI is *anchored* in a real opportunity that existed at draft time — the opportunity number wasn't fabricated, the URL isn't a typo, the deadline isn't invented. **Without the sender being trusted.**
 
-Tampering with any trust-relevant field (e.g. swapping `opportunity_number`) breaks the hash, and `verify_loi.py` flags it. We verified this end-to-end: see `verify.py` claims 10–12 (12/12 PASS).
+Tampering with the opportunity number, URL, or deadline (e.g. swapping `opportunity_number`) breaks the hash, and `verify_loi.py` flags it. Those are the three fields the canonical hash binds — the fields a funder needs to confirm the grant is real. We verified this end-to-end: see `verify.py` claims 10–12 and 22 for the LOI receipt (23/23 PASS), with a second receipt for `/pathway` proven by claims 17–21 and 23.
 
 This is the category that didn't exist yesterday: **verifiable application infrastructure**. Once one funder requires it, every funder will — because LLM-drafted prose *without* it is indistinguishable from chatbot slop, and the volume of AI-generated applications hitting funders is about to scale by 100×.
 
@@ -88,9 +88,9 @@ GrantScribe is the universalized version of the same instinct: **every other fam
 
 ---
 
-## Why it stands out *in this specific hackathon*
+## What the bar looks like now
 
-Compare GrantScribe to the field a Devpost judge will actually read this summer. The other 100+ "Slack Agent for Good" entries will be slash-commands wrapped around an LLM.
+This table isn't a ranking against the field — it's the line between an LLM wrapped in slash-commands and a system that refuses to ship anything it can't verify. After this, the second column is the floor.
 
 | | Typical Slack Agent-for-Good hackathon entry | **GrantScribe** |
 |---|---|---|
@@ -103,22 +103,24 @@ Compare GrantScribe to the field a Devpost judge will actually read this summer.
 | Citations on tutor answers | Sometimes, optional | **Required — no source page, no answer** |
 | MCP integration | Sticker | **Two proven clients: the Slack bridge, and a standalone CLI (`demo/mcp_client.py`)** |
 | Funder-side verifiability | None — receiver must trust the sender | **Cryptographic receipt on every LOI, re-verified live against grants.gov by `verify_loi.py`** |
-| Auditability of the submission itself | "Trust us, we built this" | **`python verify.py` → 12/12 PASS with file:line evidence** |
+| Auditability of the submission itself | "Trust us, we built this" | **`python verify.py` → 23/23 PASS with file:line evidence** |
 
-**Every other entry will be measurable in tokens. GrantScribe is measurable in submittable artifacts.**
+**An AI tool measured in tokens has shipped nothing. GrantScribe is measured in submittable artifacts — and a receipt the funder can re-check.**
 
 ---
 
 ## What lives under the hood — honest version
 
-Four commands, three engine shapes, one MCP server:
+Seven commands, four engine shapes, one MCP server:
 
 - **Two retrieval pipelines** share a *extract → fetch → JSON-rerank-with-reason* shape: `grant_intel.find_grants` (grants.gov) and `resources.find_resources` (Internet Archive + curated providers).
-- **One drafter** is single-shot generation + verbatim post-check: `loi_drafter.draft_loi`.
+- **Two drafters** are one shape — single-shot generation + verbatim post-check, each emitting a receipt the funder re-verifies: `loi_drafter.draft_loi` (LOI → re-checkable to grants.gov via `verify_loi.py`) and `pathway_drafter.draft_pathway_plan` (training plan → re-checkable to the DOL CareerOneStop ETPL by `DetailId` via `verify_pathway.py`). One shape, two instances. Draft-then-prove, run twice.
+- **One workforce-data pipeline** maps a messy goal job → real occupation → the credential it requires → real enrollable programs near you, composing two live DOL CareerOneStop services: `pathway.build_pathway` (behind `/pathway`) and `training_api.find_training` (behind `/training`).
 - **One grounded tutor** is multi-source MediaWiki retrieval + cited single answer: `ask.answer_question`.
-- **All four** are exposed through one MCP server (`grants_server.py`). Both the Slack app (via `mcp_bridge.py`) and a generic standalone CLI (`demo/mcp_client.py`, which doesn't import anything from `grantscribe`) call the same tools the same way.
+- **One honest empty state, on purpose.** `/scholarships` has no engine because no free public scholarship API exists — the handler says exactly that and redirects to `/pathway`, `/training`, `/grants`. The empty state that tells the truth is the feature.
+- **All of it** is exposed through one MCP server (`grants_server.py`). Both the Slack app (via `mcp_bridge.py`) and a generic standalone CLI (`demo/mcp_client.py`, which doesn't import anything from `grantscribe`) call the same tools the same way.
 
-Not "one engine." One MCP server, three engine shapes, four user-facing capabilities — and one ironclad rule across all of them: **the system never invents a fact and never ships an artifact it can't verify.**
+Not "one engine." One MCP server, seven slash commands, two drafters that draft-then-prove — the LOI receipt re-verifies to grants.gov, the /pathway plan receipt re-verifies to the DOL CareerOneStop ETPL — and one ironclad rule across all of them: **the system never invents a fact and never ships an artifact it can't verify.**
 
 ---
 
@@ -132,7 +134,7 @@ Not "one engine." One MCP server, three engine shapes, four user-facing capabili
 
 ## What the live demo proves
 
-Against real grants.gov data, end-to-end on 2026-05-26:
+Against real grants.gov data, end-to-end on 2026-05-27:
 
 1. The user runs `/setreport`, pastes a sample organizational report. Stored privately, per-(workspace, user).
 2. The user runs `/grants youth refugee tutoring and after-school program in Ohio — need operating funds for staff and supplies`. Behind that one line: 654 raw matches → expired listings dropped → 2–3 grants ranked for fit, each with a one-line reason shown on the card.

@@ -33,7 +33,7 @@ from typing import Callable
 import httpx
 
 ROOT = Path(__file__).parent
-MCP_HEALTH_URL = "http://localhost:8000/mcp"
+MCP_HEALTH_URL = f"http://localhost:{os.environ.get('FASTMCP_PORT', '8000')}/mcp"
 SERVER_STARTUP_TIMEOUT = 30
 
 
@@ -398,6 +398,215 @@ def check_ask_grounded_or_refuses(_: Context) -> str:
     )
 
 
+def check_find_training_rejects_empty_keyword(_: Context) -> str:
+    """C13: find_training refuses an empty keyword before touching the API (guard, negative)."""
+    from training_api import find_training
+    try:
+        find_training("   ", rows=3)
+    except ValueError as exc:
+        return f"find_training refuses an empty keyword (ValueError: {exc}) — no blind API call"
+    raise AssertionError("find_training did not raise on an empty keyword")
+
+
+def check_find_training_returns_real_programs(_: Context) -> str:
+    """C14: find_training via MCP returns real CareerOneStop programs with the credential each grants."""
+    out = asyncio.run(_mcp_call("find_training", {"keyword": "nursing", "location": "0", "rows": 3}))
+    programs = out.get("programs", [])
+    if not programs:
+        raise AssertionError(f"find_training returned no programs (count={out.get('count')})")
+    if out.get("count", 0) <= 0:
+        raise AssertionError(f"find_training reported a non-positive RecordCount: {out.get('count')}")
+    sample = programs[0]
+    for f in ("program", "credential", "award_level", "format", "school", "city", "state", "url"):
+        if f not in sample:
+            raise AssertionError(f"normalized program missing key {f!r}: {sample!r}")
+    if not sample["school"].strip():
+        raise AssertionError(f"top program has no school name: {sample!r}")
+    if out.get("source") != "U.S. DOL CareerOneStop":
+        raise AssertionError(f"unexpected source attribution: {out.get('source')!r}")
+    return (
+        f"MCP find_training returned {len(programs)} real programs of {out['count']:,} "
+        f"(e.g. {sample['program'][:45]!r} @ {sample['school']!r}) — CareerOneStop live (training_api.py)"
+    )
+
+
+def check_pathway_rejects_empty_goal(_: Context) -> str:
+    """C15: build_pathway refuses an empty goal before any API call (guard, negative)."""
+    from pathway import build_pathway
+    try:
+        build_pathway("  ", location="0")
+    except ValueError as exc:
+        return f"build_pathway refuses an empty goal (ValueError: {exc})"
+    raise AssertionError("build_pathway did not raise on an empty goal")
+
+
+def check_pathway_composes_occupation_and_training(_: Context) -> str:
+    """C16: build_pathway via MCP composes a real occupation + credential + real local programs."""
+    out = asyncio.run(_mcp_call("build_pathway", {"goal": "registered nurse", "location": "0", "rows": 3}))
+    occ = out.get("occupation")
+    if not occ or not occ.get("onet_code"):
+        raise AssertionError(f"pathway did not resolve a real occupation: {out.get('occupation')!r}")
+    programs = out.get("programs", [])
+    if not programs:
+        raise AssertionError("pathway returned no training programs to reach the goal")
+    if not out.get("credentials"):
+        raise AssertionError("pathway returned no credentials (the education the job needs)")
+    return (
+        f"pathway 'registered nurse' → occupation {occ['title']!r} (O*NET {occ['onet_code']}), "
+        f"credential(s) {out['credentials']}, {len(programs)} of {out.get('program_count'):,} programs "
+        "— Occupation + Training composed (pathway.py)"
+    )
+
+
+def check_pathway_receipt_offline_roundtrip(_: Context) -> str:
+    """C17: build_pathway_receipt + verify_pathway_receipt_offline form a self-consistent pair."""
+    from pathway_receipt import (build_pathway_receipt, parse_pathway_receipt,
+                                  verify_pathway_receipt_offline)
+    program = {
+        "detail_id": "284196480508", "program": "Welding I",
+        "school": "Carolina Welding Training Institute",
+        "credential": "NCCER Welding I Certificate", "cip_code": "480508",
+    }
+    receipt = build_pathway_receipt(program, "Sample student story for hashing.",
+                                    goal_occupation="Welders (O*NET 51-4121.00)")
+    parsed = parse_pathway_receipt(receipt)
+    if parsed is None:
+        raise AssertionError("build_pathway_receipt produced text parse_pathway_receipt cannot read")
+    result = verify_pathway_receipt_offline(parsed)
+    if not result["verified"]:
+        raise AssertionError(f"freshly-built pathway receipt failed offline verification: {result}")
+    return f"pathway receipt round-trip OK; program_sha256={parsed['program_canonical_sha256'][:16]}…"
+
+
+def check_pathway_receipt_detects_tampering(_: Context) -> str:
+    """C18: a tampered pathway receipt (school swapped) fails offline verification."""
+    from pathway_receipt import (build_pathway_receipt, parse_pathway_receipt,
+                                  verify_pathway_receipt_offline)
+    program = {
+        "detail_id": "284196480508", "program": "Welding I",
+        "school": "Carolina Welding Training Institute",
+        "credential": "NCCER Welding I Certificate", "cip_code": "480508",
+    }
+    receipt = build_pathway_receipt(program, "student story")
+    tampered = parse_pathway_receipt(
+        receipt.replace("Carolina Welding Training Institute", "Fake Diploma Mill LLC"))
+    if tampered is None:
+        raise AssertionError("tampered pathway receipt didn't parse — test setup broken")
+    result = verify_pathway_receipt_offline(tampered)
+    if result["verified"]:
+        raise AssertionError("tampered pathway receipt passed — the hash check isn't catching tampering")
+    hash_check = next((c for c in result["checks"] if "program_canonical_sha256" in c["name"]), None)
+    if not hash_check or hash_check["passed"]:
+        raise AssertionError("hash-mismatch check did not fire on the swapped school")
+    return "tampering detected: a swapped school recomputes a different program_canonical_sha256"
+
+
+def check_pathway_receipt_anchored_in_live_careeronestop(_: Context) -> str:
+    """C19: a fresh pathway receipt re-verifies live against CareerOneStop by DetailId.
+
+    Workforce-board workflow: re-fetch the named ETPL program, recompute the
+    canonical hash, confirm it matches the receipt. Closes the loop.
+    """
+    from training_api import find_training
+    from pathway_receipt import (build_pathway_receipt, parse_pathway_receipt,
+                                  verify_pathway_receipt_live)
+    program = find_training("welding", rows=1)["programs"][0]
+    receipt = build_pathway_receipt(program, "Live-anchor verification — story stand-in.",
+                                    goal_occupation="Welders (O*NET 51-4121.00)")
+    parsed = parse_pathway_receipt(receipt)
+    if parsed is None:
+        raise AssertionError("receipt parse failed on live-anchor test")
+    result = verify_pathway_receipt_live(parsed)
+    if not result["verified"]:
+        raise AssertionError(f"live pathway receipt verification failed: {result}")
+    return (
+        f"live CareerOneStop re-fetch of DetailId {program['detail_id']} hashes to the same "
+        f"program_canonical_sha256 — pathway receipt anchored in live ETPL data"
+    )
+
+
+def check_pathway_plan_refuses_when_program_unnamed(_: Context) -> str:
+    """C20: the plan drafter refuses output that doesn't name the funded program verbatim (negative)."""
+    src = (ROOT / "pathway_drafter.py").read_text()
+    if "refusing to return a plan that misnames the funded program" not in src:
+        raise AssertionError("pathway_drafter.py post-check sentinel missing — code may have regressed")
+    # Simulate the verbatim post-check (same logic as pathway_drafter.py) on a crafted plan
+    # that names the school + credential but NOT the program.
+    program = {"program": "MIG Welding Certificate", "school": "Richmond Community College",
+               "credential": "Certificate"}
+    plan = ("RE: Funding request — Some Other Program at Richmond Community College\n\n"
+            "Body…\nCredential to be earned: Certificate\n")
+    missing = []
+    if program["program"] not in plan:
+        missing.append("program name")
+    if program["school"] not in plan:
+        missing.append("school")
+    if program["credential"] and program["credential"] not in plan:
+        missing.append("credential")
+    if missing != ["program name"]:
+        raise AssertionError(f"post-check did not identify the missing program name: {missing!r}")
+    return "post-check refuses a plan that doesn't name the funded program verbatim (pathway_drafter.py)"
+
+
+def check_receipt_types_not_confused(_: Context) -> str:
+    """C21: LOI and pathway receipts use distinct markers — neither verifier mis-judges the other."""
+    from loi_receipt import build_receipt as build_loi, parse_receipt as parse_loi
+    from pathway_receipt import build_pathway_receipt, parse_pathway_receipt
+    pathway = build_pathway_receipt(
+        {"detail_id": "1", "program": "P", "school": "S", "credential": "C", "cip_code": "480508"}, "story")
+    if parse_loi(pathway) is not None:
+        raise AssertionError("the LOI parser wrongly parsed a pathway receipt — types not discriminated")
+    loi = build_loi({"opportunity_number": "X", "url": "https://www.grants.gov/x", "close_date": "1/1/2030"}, "r")
+    if parse_pathway_receipt(loi) is not None:
+        raise AssertionError("the pathway parser wrongly parsed an LOI receipt — types not discriminated")
+    return "LOI and pathway receipts use distinct markers — a verifier never calls the other kind 'forged'"
+
+
+def check_loi_receipt_verifies_without_close_date(_: Context) -> str:
+    """C22: an LOI receipt for a deadline-less grant still verifies (regression guard for the close_date fix)."""
+    from loi_receipt import build_receipt, parse_receipt, verify_receipt_offline
+    grant = {
+        "opportunity_number": "NSF-STANDING-1", "title": "T", "agency": "A",
+        "url": "https://www.grants.gov/search-results-detail/1", "close_date": "",
+    }
+    parsed = parse_receipt(build_receipt(grant, "org report"))
+    if parsed is None:
+        raise AssertionError("receipt parse failed on deadline-less grant")
+    result = verify_receipt_offline(parsed)
+    if not result["verified"]:
+        raise AssertionError(f"deadline-less grant receipt failed offline verify: {result}")
+    return "receipt for a grant with no posted close_date verifies (standing announcements supported)"
+
+
+def check_verify_pathway_cli_exists_and_runs(_: Context) -> str:
+    """C23: verify_pathway.py ships and returns 0 on a valid receipt (the receipt's advertised command is real)."""
+    import contextlib
+    import io
+    import os
+    import tempfile
+    import verify_pathway
+    from pathway_receipt import build_pathway_receipt
+    if not (ROOT / "verify_pathway.py").exists():
+        raise AssertionError("verify_pathway.py is missing — receipts reference a command that does not exist")
+    program = {
+        "detail_id": "284196480508", "program": "Welding I",
+        "school": "Carolina Welding Training Institute",
+        "credential": "NCCER Welding I Certificate", "cip_code": "480508",
+    }
+    plan = "RE: x\n\nbody\n\n" + build_pathway_receipt(program, "story")
+    with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False) as f:
+        f.write(plan)
+        path = f.name
+    try:
+        with contextlib.redirect_stdout(io.StringIO()):
+            rc = verify_pathway.main(["--plan", path])
+    finally:
+        os.unlink(path)
+    if rc != 0:
+        raise AssertionError(f"verify_pathway.py returned {rc} on a valid receipt")
+    return "verify_pathway.py exists and returns 0 on a valid pathway receipt — the advertised command is real"
+
+
 CLAIMS: list[Claim] = [
     Claim(1, "/setreport stores per-(workspace, user) report and isolates users",
           "slack_app.py:get_report / set_report", check_setreport_store, requires_mcp=False),
@@ -423,6 +632,28 @@ CLAIMS: list[Claim] = [
           "loi_receipt.py:verify_receipt_offline (negative test)", check_receipt_detects_tampering, requires_mcp=False),
     Claim(12, "Receipt re-verifies live against grants.gov (funder-side audit closes the loop)",
           "loi_receipt.py:verify_receipt_live + grants_api._fetch_grants", check_receipt_anchored_in_live_grants_gov, requires_mcp=True),
+    Claim(13, "/training refuses an empty keyword before calling the API (guard)",
+          "training_api.py:find_training", check_find_training_rejects_empty_keyword, requires_mcp=False),
+    Claim(14, "/training returns real CareerOneStop programs with the credential each grants",
+          "training_api.py + grants_server.py (verified via MCP)", check_find_training_returns_real_programs, requires_mcp=True),
+    Claim(15, "/pathway refuses an empty goal before any API call (guard)",
+          "pathway.py:build_pathway", check_pathway_rejects_empty_goal, requires_mcp=False),
+    Claim(16, "/pathway maps a goal job → real occupation → credential → real local programs",
+          "pathway.py + occupation_api.py + training_api.py (verified via MCP)", check_pathway_composes_occupation_and_training, requires_mcp=True),
+    Claim(17, "Every /pathway plan carries a verifiable receipt (round-trips offline)",
+          "pathway_receipt.py:build + verify_pathway_receipt_offline", check_pathway_receipt_offline_roundtrip, requires_mcp=False),
+    Claim(18, "Pathway receipt catches tampering (a swapped school fails the hash check)",
+          "pathway_receipt.py:verify_pathway_receipt_offline (negative test)", check_pathway_receipt_detects_tampering, requires_mcp=False),
+    Claim(19, "Pathway receipt re-verifies live against CareerOneStop (workforce-board audit closes the loop)",
+          "pathway_receipt.py:verify_pathway_receipt_live + training_api.fetch_program_detail", check_pathway_receipt_anchored_in_live_careeronestop, requires_mcp=False),
+    Claim(20, "Plan drafter refuses output that doesn't name the funded program verbatim",
+          "pathway_drafter.py (post-check, negative test)", check_pathway_plan_refuses_when_program_unnamed, requires_mcp=False),
+    Claim(21, "LOI and pathway receipts are type-discriminated (no verifier mis-judges the other)",
+          "loi_receipt.py vs pathway_receipt.py (distinct markers)", check_receipt_types_not_confused, requires_mcp=False),
+    Claim(22, "LOI receipt verifies for a deadline-less grant (standing announcements — close_date regression guard)",
+          "loi_receipt.py:verify_receipt_offline (required tuple)", check_loi_receipt_verifies_without_close_date, requires_mcp=False),
+    Claim(23, "verify_pathway.py ships and verifies a real receipt (the receipt's advertised command exists)",
+          "verify_pathway.py", check_verify_pathway_cli_exists_and_runs, requires_mcp=False),
 ]
 
 

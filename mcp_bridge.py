@@ -36,8 +36,21 @@ def _first_text(result) -> str | None:
     return None
 
 
+def _run(coro):
+    """Run an MCP coroutine, unwrapping anyio's ExceptionGroup so the real leaf
+    error (e.g. the CareerOneStop 404 detail, or the tool's own RuntimeError)
+    reaches the user — instead of the opaque 'unhandled errors in a TaskGroup'."""
+    try:
+        return asyncio.run(coro)
+    except BaseExceptionGroup as eg:  # py3.11+
+        exc: BaseException = eg
+        while isinstance(exc, BaseExceptionGroup) and exc.exceptions:
+            exc = exc.exceptions[0]
+        raise exc from None
+
+
 def mcp_find_grants(description: str, rows: int = 15, top: int = 3) -> dict:
-    result = asyncio.run(_call_tool("find_grants", {"description": description, "rows": rows, "top": top}))
+    result = _run(_call_tool("find_grants", {"description": description, "rows": rows, "top": top}))
     if result.structuredContent is not None:
         return result.structuredContent
     text = _first_text(result)
@@ -47,7 +60,7 @@ def mcp_find_grants(description: str, rows: int = 15, top: int = 3) -> dict:
 
 
 def mcp_draft_loi(grant: dict, org_report: str) -> str:
-    result = asyncio.run(_call_tool("draft_loi", {"grant": grant, "org_report": org_report}))
+    result = _run(_call_tool("draft_loi", {"grant": grant, "org_report": org_report}))
     text = _first_text(result)
     if text:
         return text
@@ -57,7 +70,7 @@ def mcp_draft_loi(grant: dict, org_report: str) -> str:
 
 
 def mcp_find_resources(description: str, rows: int = 12, top: int = 4) -> dict:
-    result = asyncio.run(_call_tool("find_resources", {"description": description, "rows": rows, "top": top}))
+    result = _run(_call_tool("find_resources", {"description": description, "rows": rows, "top": top}))
     if result.structuredContent is not None:
         return result.structuredContent
     text = _first_text(result)
@@ -66,8 +79,40 @@ def mcp_find_resources(description: str, rows: int = 12, top: int = 4) -> dict:
     raise RuntimeError("find_resources returned no usable content")
 
 
+def mcp_find_training(keyword: str, location: str = "0", rows: int = 5) -> dict:
+    result = _run(_call_tool("find_training", {"keyword": keyword, "location": location, "rows": rows}))
+    if result.structuredContent is not None:
+        return result.structuredContent
+    text = _first_text(result)
+    if text:
+        return json.loads(text)
+    raise RuntimeError("find_training returned no usable content")
+
+
+def mcp_build_pathway(goal: str, location: str = "0", rows: int = 4) -> dict:
+    result = _run(_call_tool("build_pathway", {"goal": goal, "location": location, "rows": rows}))
+    if result.structuredContent is not None:
+        return result.structuredContent
+    text = _first_text(result)
+    if text:
+        return json.loads(text)
+    raise RuntimeError("build_pathway returned no usable content")
+
+
+def mcp_draft_pathway_plan(program: dict, student_story: str, goal_occupation: str = "") -> str:
+    result = _run(_call_tool("draft_pathway_plan", {
+        "program": program, "student_story": student_story, "goal_occupation": goal_occupation,
+    }))
+    text = _first_text(result)
+    if text:
+        return text
+    if isinstance(result.structuredContent, dict) and "result" in result.structuredContent:
+        return result.structuredContent["result"]
+    raise RuntimeError("draft_pathway_plan returned no text content")
+
+
 def mcp_answer_question(question: str) -> dict:
-    result = asyncio.run(_call_tool("answer_question", {"question": question}))
+    result = _run(_call_tool("answer_question", {"question": question}))
     if result.structuredContent is not None:
         return result.structuredContent
     text = _first_text(result)

@@ -2,7 +2,7 @@
 
 **You describe what you do. The Letter of Intent appears, in your voice, ready to submit — with a receipt the funder can verify.**
 
-A Slack agent that finds the funding and free learning you qualify for, **drafts the application in your own voice, refuses to ship a draft that isn't actually submittable, and ships a verifiable receipt with every LOI** so the funder can re-verify it back to live grants.gov data without trusting the sender. Three professionals the wealthy hire — grant-writer, college counselor, tutor — inside one Slack channel. Plus a new category that didn't exist yesterday: **verifiable application infrastructure**.
+A Slack agent that finds the funding and free learning you qualify for, **drafts the application in your own voice, refuses to ship a draft that isn't actually submittable, and ships a verifiable receipt with every LOI** so the funder can re-verify it back to live grants.gov data without trusting the sender. The grant-writer, the college counselor, and the tutor — three roles most people can't afford — inside one Slack channel, free. Plus a new category that didn't exist yesterday: **verifiable application infrastructure**.
 
 Built for the Slack Agent Builder Challenge (Slack Agent for Good).
 
@@ -12,7 +12,9 @@ Built for the Slack Agent Builder Challenge (Slack Agent for Good).
 |---|---|---|
 | `/setreport` | Anyone installing the agent | Paste any prior grant/annual report (modal, or inline). Stored privately per workspace. `/grants` refuses to draft without one — **no fixtures, no fictional fallback**. |
 | `/grants <what you do>` | Nonprofits / intermediaries | Finds open federal grants that fit + drafts the LOI in your org's voice. The drafter raises `RuntimeError` if the verbatim opportunity number, URL, or deadline from grants.gov are missing from the letter. Submittable or it doesn't exist. |
-| `/scholarships <about you>` | Students | Same drafting shape against U.S. DOL CareerOneStop. Manifest-registered; pending the free CareerOneStop token. |
+| `/scholarships <about you>` | Students | **No honest scholarship search exists yet** — there is no free public scholarship API, and CareerOneStop has no scholarship service. So this command tells you that plainly and points to the routes that *do* ship and *do* remove the money barrier: `/pathway`, `/training`, `/grants`. The honest empty state is the feature. |
+| `/training <what to train for>` | Anyone | Real accredited training programs near you + the credential each one grants, live from U.S. DOL CareerOneStop (ETA Training API). No fixtures — real ETPL programs or it says so. |
+| `/pathway <a job you want>` | Anyone | Maps a goal job → the credential it requires → real local programs that grant it (CareerOneStop O*NET + ETPL). Drafts a plan in the student's voice and **ships a second verifiable receipt** — re-checkable to the DOL CareerOneStop ETPL by DetailId via `verify_pathway.py`. Two receipts, one pattern: draft, then prove. |
 | `/learn <a goal>` | Anyone | Free, level-matched textbooks (Internet Archive) + curated providers (OpenStax · MIT OCW · Khan · freeCodeCamp). |
 | `/ask <a question>` | Anyone | A free tutor that answers from open textbooks (Wikibooks / Wikiversity) **with citations** — returns `null` rather than invent. |
 
@@ -22,13 +24,13 @@ Raw grants.gov / Archive keyword search returns hundreds of loosely-matched, oft
 
 > messy plain-language request → tight query → drop expired → **re-rank for genuine fit (with a reason on every card)** → draft in **your** voice from **your** report → **post-check verbatim grants.gov identifiers, or raise**.
 
-The moat is two things, both shipped in code:
+Two things make that real, both shipped in code:
 1. The user supplies the voice (`/setreport` → per-(workspace, user) store), so every workspace's drafts are grounded in that workspace's history — never in a fixture.
 2. The drafter is structurally incapable of returning a non-submittable artifact (`loi_drafter.py` post-checks every verbatim grants.gov field).
 
 ## Architecture
 
-`Slack (Bolt, Socket Mode)` → **MCP client (`mcp_bridge.py`)** → **MCP server (`grants_server.py`)** → `DeepSeek V4` + live free data (`grants.gov` · `CareerOneStop` · `Internet Archive` · `Wikibooks/Wikiversity`).
+`Slack (Bolt, Socket Mode)` → **MCP client (`mcp_bridge.py`)** → **MCP server (`grants_server.py`)** → `DeepSeek V4` + live free data: `grants.gov` (grants + LOI) · `CareerOneStop` (powers `/training` and `/pathway`, the U.S. DOL workforce pillar) · `Internet Archive` · `Wikibooks/Wikiversity` (free learning).
 
 MCP is **load-bearing** — and observable: two distinct MCP clients call the same server today. The Slack app's bridge in production, and `demo/mcp_client.py` (a standalone CLI with no imports from `grantscribe`) for portability proof. Any MCP-aware surface (Claude desktop, Slack's own MCP client) can reuse the tools unchanged. Full diagram: [`submission/architecture.png`](submission/architecture.png) (Mermaid source in [`submission/ARCHITECTURE.md`](submission/ARCHITECTURE.md)).
 
@@ -38,8 +40,8 @@ Python · `slack-bolt` · Model Context Protocol (FastMCP) · DeepSeek V4 (Flash
 
 ## Run it
 
-1. `cp .env.example .env` and fill `DEEPSEEK_API_KEY`, `SLACK_BOT_TOKEN`, `SLACK_APP_TOKEN` (CareerOneStop optional).
-2. Start the MCP server:
+1. `cp .env.example .env` and fill `DEEPSEEK_API_KEY`, `SLACK_BOT_TOKEN`, `SLACK_APP_TOKEN`. Add `CAREERONESTOP_USERID` + `CAREERONESTOP_TOKEN` (free) to power `/training` and `/pathway`, which run live against the U.S. DOL CareerOneStop ETPL.
+2. Start the MCP server (binds `localhost:8000`; if that port is busy, set `FASTMCP_PORT=<n>` — `verify.py` honors the same variable):
    `PYTHONPATH=. uv run --with-requirements requirements.txt python grants_server.py`
 3. Start the Slack app:
    `PYTHONPATH=. uv run --with-requirements requirements.txt python slack_app.py`
@@ -63,10 +65,10 @@ Single entry point: [`SUBMISSION.md`](SUBMISSION.md). It maps every Devpost requ
 **Audit the claims yourself:**
 
 ```
-python verify.py        # 12 claims, all live — 12/12 PASS as of 2026-05-26
+python verify.py        # 23 claims, all live — 23/23 PASS as of 2026-06-13
 ```
 
-The script starts the MCP server, exercises every shipped claim from `SUBMISSION.md` §4 (the moat refuses, the post-check rejects bad drafts, the MCP server exposes the load-bearing tools, the tutor cites or refuses, the per-user report store isolates users, **every LOI carries a verifiable receipt, tampering with a receipt fails the hash check, the receipt re-verifies live against grants.gov**), and prints PASS / FAIL per claim with file:line evidence. Exits 0 only if every claim is verified live.
+The script starts the MCP server, exercises every shipped claim from `SUBMISSION.md` §4 (the moat refuses, the post-check rejects bad drafts, the MCP server exposes the load-bearing tools, the tutor cites or refuses, the per-user report store isolates users, **every LOI carries a verifiable receipt, tampering with a receipt fails the hash check, the receipt re-verifies live against grants.gov**, `/training` and `/pathway` run live on CareerOneStop and return real programs with the credential each grants, **every `/pathway` plan carries a second verifiable receipt, a swapped school fails its hash check, and the plan re-verifies live against the U.S. DOL CareerOneStop ETPL by DetailId via `verify_pathway.py`**), and prints PASS / FAIL per claim with file:line evidence. Exits 0 only if every claim is verified live.
 
 **Funder-side: verify a received LOI:**
 
